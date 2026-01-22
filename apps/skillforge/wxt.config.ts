@@ -17,7 +17,7 @@ export default defineConfig({
     host_permissions: [
       'https://claude.ai/*',
       'https://*.claude.ai/*',
-      'https://*/*',
+      'https://*.r2.dev/*',
     ],
 
     icons: {

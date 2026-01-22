@@ -5,8 +5,7 @@ export interface SkillConfig {
   name: string;
   version: string;
   description: string;
-  instructions?: string;
-  source?: string;
+  source: string;
   enabledByDefault?: boolean;
   allowUserToggle?: boolean;
 }

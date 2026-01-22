@@ -73,42 +73,21 @@ function isValidSkillConfig(skill: unknown): skill is SkillConfig {
 
   if (typeof s.name !== 'string' || s.name.trim() === '') return false;
   if (typeof s.description !== 'string') return false;
-
-  // Must have either instructions or source
-  const hasInstructions = typeof s.instructions === 'string' && s.instructions.trim() !== '';
-  const hasSource = typeof s.source === 'string' && s.source.trim() !== '';
-
-  if (!hasInstructions && !hasSource) return false;
+  if (typeof s.source !== 'string' || s.source.trim() === '') return false;
 
   return true;
 }
 
 /**
- * Resolve skill content from config
- * If skill has inline instructions, use those.
- * If skill has source URL, fetch and parse it.
+ * Resolve skill content from SKILL.md source
  */
 export async function resolveSkillContent(skill: SkillConfig): Promise<SkillContent> {
-  // Inline instructions - use directly
-  if (skill.instructions && skill.instructions.trim()) {
-    return {
-      name: skill.name,
-      description: skill.description,
-      instructions: skill.instructions,
-    };
-  }
-
-  // Fetch from source URL
-  if (!skill.source) {
-    throw new ConfigError(`Skill "${skill.name}" has no instructions or source`);
-  }
-
   let response: Response;
   try {
     response = await fetch(skill.source, {
       method: 'GET',
       headers: {
-        Accept: 'text/plain, text/markdown, application/json',
+        Accept: 'text/plain, text/markdown',
       },
     });
   } catch (error) {
@@ -123,21 +102,7 @@ export async function resolveSkillContent(skill: SkillConfig): Promise<SkillCont
 
   const content = await response.text();
 
-  // Check if it's JSON
-  if (skill.source.endsWith('.json')) {
-    try {
-      const json = JSON.parse(content);
-      return {
-        name: json.name || skill.name,
-        description: json.description || skill.description,
-        instructions: json.instructions || '',
-      };
-    } catch {
-      throw new ConfigError(`Invalid JSON in skill source for "${skill.name}"`);
-    }
-  }
-
-  // Check if it's SKILL.md format
+  // Parse SKILL.md format
   if (isSkillMdFormat(content)) {
     const parsed = parseSkillMd(content);
     return {
@@ -147,7 +112,7 @@ export async function resolveSkillContent(skill: SkillConfig): Promise<SkillCont
     };
   }
 
-  // Plain text - use as instructions
+  // Plain markdown without frontmatter - use entire content as instructions
   return {
     name: skill.name,
     description: skill.description,

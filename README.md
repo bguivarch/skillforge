@@ -99,13 +99,45 @@ Then load the extension in Chrome:
 3. Click "Load unpacked"
 4. Select `dist/chrome-mv3`
 
+## Sharing Skills with Colleagues
+
+Once you've built and configured your extension, you can share it with colleagues so they get the same skills automatically.
+
+### 1. Build the Extension ZIP
+
+```bash
+pnpm zip
+```
+
+This creates a distributable ZIP file at `dist/skillforge-<version>-chrome.zip`.
+
+### 2. Share the ZIP
+
+Send the ZIP file to your colleagues via Slack, email, Google Drive, or any file sharing service.
+
+### 3. Colleagues Install the Extension
+
+Recipients install the extension in Chrome:
+
+1. Unzip the file
+2. Go to `chrome://extensions`
+3. Enable "Developer mode"
+4. Click "Load unpacked"
+5. Select the unzipped folder
+
+The extension will automatically sync skills from your configured R2 bucket - no additional setup needed for colleagues.
+
+### Why This Works
+
+The extension is pre-configured with your `VITE_CONFIG_URL` at build time. When colleagues install it, they automatically connect to your shared skill repository and receive all team skills.
+
 ## CLI Commands
 
 | Command | Description |
 |---------|-------------|
 | `pnpm dev` | Start extension in development mode with hot reload |
 | `pnpm build` | Build extension for production |
-| `pnpm zip` | Create ZIP file for Chrome Web Store |
+| `pnpm zip` | Create ZIP file for Chrome Web Store submission |
 | `pnpm upload-skills` | Upload skills folder to R2 |
 | `pnpm install-skill <repo>` | Install skills from GitHub |
 | `pnpm typecheck` | Type-check TypeScript |
@@ -348,6 +380,34 @@ lib/messaging.ts ──────▶ background/index.ts
                     ▼                   ▼
                R2 Bucket          Claude.ai API
 ```
+
+## Installing from a Shared ZIP
+
+If a colleague shared a SkillForge extension ZIP with you, follow these steps to install it:
+
+### Chrome
+
+1. **Unzip the file** - Extract the ZIP to a folder (e.g., `skillforge-extension/`)
+
+2. **Open Chrome Extensions** - Navigate to `chrome://extensions` in your browser
+
+3. **Enable Developer Mode** - Toggle the switch in the top-right corner
+
+4. **Load the extension** - Click "Load unpacked" and select the unzipped folder
+
+5. **Pin the extension** - Click the puzzle icon in Chrome's toolbar and pin SkillForge for easy access
+
+### First Sync
+
+1. Click the SkillForge icon in your toolbar
+2. Click "Sync All" to install all team skills
+3. Go to [claude.ai](https://claude.ai) - your skills are ready to use
+
+### Staying Updated
+
+When your team updates the skills, you'll see a badge on the extension icon. Click it and hit "Sync All" to get the latest versions.
+
+> **Note**: You don't need to set up R2 or clone any repository. The extension is pre-configured to connect to your team's skill server.
 
 ## Contributing
 

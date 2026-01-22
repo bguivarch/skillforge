@@ -3,6 +3,7 @@ import { defineConfig } from 'wxt';
 export default defineConfig({
   modules: ['@wxt-dev/module-svelte'],
   srcDir: '.',
+  outDir: 'dist',
 
   manifest: {
     name: 'SkillForge',

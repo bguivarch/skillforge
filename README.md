@@ -46,6 +46,8 @@ pnpm install
 
 ### 2. Configure Environment
 
+See [Setting Up Cloudflare R2](#setting-up-cloudflare-r2) for how to get these credentials.
+
 Create a `.env` file in the root:
 
 ```bash
@@ -95,7 +97,7 @@ Then load the extension in Chrome:
 1. Go to `chrome://extensions`
 2. Enable "Developer mode"
 3. Click "Load unpacked"
-4. Select `.output/chrome-mv3`
+4. Select `dist/chrome-mv3`
 
 ## CLI Commands
 
@@ -301,8 +303,8 @@ Shows count of pending actions (new skills + available updates).
 
 ## Setting Up Cloudflare R2
 
-1. Create a Cloudflare account at [cloudflare.com](https://cloudflare.com)
-2. Go to R2 Object Storage
+1. Go to the [Cloudflare Dashboard](https://dash.cloudflare.com/) (create an account if needed)
+2. Navigate to R2 Object Storage
 3. Create a new bucket
 4. Enable public access (or use a custom domain)
 5. Create an API token with R2 read/write permissions

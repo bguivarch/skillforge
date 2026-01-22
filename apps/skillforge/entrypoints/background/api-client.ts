@@ -162,6 +162,17 @@ export async function disableSkill(orgId: string, skillId: string): Promise<void
 }
 
 /**
+ * Delete a skill
+ */
+export async function deleteSkill(orgId: string, skillId: string): Promise<void> {
+  const url = ENDPOINTS.deleteSkill(orgId);
+  await apiRequest(url, {
+    method: 'POST',
+    body: JSON.stringify({ skill_id: skillId }),
+  });
+}
+
+/**
  * Toggle skill enabled state
  */
 export async function toggleSkill(

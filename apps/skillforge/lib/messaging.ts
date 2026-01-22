@@ -36,6 +36,13 @@ export async function toggleSkill(skillId: string, enabled: boolean): Promise<vo
 }
 
 /**
+ * Delete a skill
+ */
+export async function deleteSkill(skillId: string, skillName: string): Promise<void> {
+  return browser.runtime.sendMessage({ type: 'DELETE_SKILL', skillId, skillName });
+}
+
+/**
  * Get pending skills counts
  */
 export async function getPendingCounts(): Promise<PendingCounts> {

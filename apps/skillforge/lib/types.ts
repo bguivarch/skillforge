@@ -130,4 +130,5 @@ export type Message =
   | { type: 'SYNC_SKILLS' }
   | { type: 'SYNC_SINGLE_SKILL'; skillName: string }
   | { type: 'TOGGLE_SKILL'; skillId: string; enabled: boolean }
+  | { type: 'DELETE_SKILL'; skillId: string; skillName: string }
   | { type: 'GET_PENDING' };

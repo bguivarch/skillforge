@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, DeleteObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
 import { config } from 'dotenv';
 import { readFileSync, readdirSync, statSync, existsSync, writeFileSync } from 'fs';
 import { join, relative } from 'path';
@@ -210,6 +210,74 @@ async function uploadToR2(key: string, content: string | Buffer, contentType: st
   await s3Client.send(command);
 }
 
+/**
+ * List all objects in R2 with a given prefix
+ */
+async function listR2Objects(prefix: string): Promise<string[]> {
+  const keys: string[] = [];
+  let continuationToken: string | undefined;
+
+  do {
+    const command = new ListObjectsV2Command({
+      Bucket: R2_BUCKET_NAME,
+      Prefix: prefix,
+      ContinuationToken: continuationToken,
+    });
+
+    const response = await s3Client.send(command);
+
+    if (response.Contents) {
+      for (const obj of response.Contents) {
+        if (obj.Key) keys.push(obj.Key);
+      }
+    }
+
+    continuationToken = response.NextContinuationToken;
+  } while (continuationToken);
+
+  return keys;
+}
+
+/**
+ * Delete an object from R2
+ */
+async function deleteFromR2(key: string): Promise<void> {
+  const command = new DeleteObjectCommand({
+    Bucket: R2_BUCKET_NAME,
+    Key: key,
+  });
+
+  await s3Client.send(command);
+}
+
+/**
+ * Extract skill names from remote R2 keys
+ * Handles both simple skills (skills/name/SKILL.md) and complex skills (skills/name.skill)
+ */
+function extractRemoteSkillNames(keys: string[]): Set<string> {
+  const names = new Set<string>();
+
+  for (const key of keys) {
+    // Skip config.json
+    if (key === 'skills/config.json') continue;
+
+    // Complex skill: skills/name.skill
+    const skillMatch = key.match(/^skills\/([^/]+)\.skill$/);
+    if (skillMatch) {
+      names.add(skillMatch[1]);
+      continue;
+    }
+
+    // Simple skill: skills/name/SKILL.md or skills/name/anything
+    const dirMatch = key.match(/^skills\/([^/]+)\//);
+    if (dirMatch) {
+      names.add(dirMatch[1]);
+    }
+  }
+
+  return names;
+}
+
 // ============================================================================
 // Main
 // ============================================================================
@@ -309,6 +377,51 @@ async function main() {
     } else {
       configJson.skills.push(skillConfig);
     }
+  }
+
+  // Detect and delete removed skills
+  console.log('\n🔍 Checking for deleted skills...');
+
+  const remoteKeys = await listR2Objects('skills/');
+  const remoteSkillNames = extractRemoteSkillNames(remoteKeys);
+
+  // Build set of local skill identifiers (both name and dirName to handle renames)
+  const localSkillIdentifiers = new Set<string>();
+  for (const skill of skills) {
+    localSkillIdentifiers.add(skill.metadata.name);
+    localSkillIdentifiers.add(skill.dirName);
+  }
+
+  // Find skills to delete
+  const skillsToDelete: string[] = Array.from(remoteSkillNames).filter(
+    remoteName => !localSkillIdentifiers.has(remoteName)
+  );
+
+  if (skillsToDelete.length > 0) {
+    console.log(`Found ${skillsToDelete.length} skill(s) to delete:\n`);
+
+    for (const skillName of skillsToDelete) {
+      console.log(`🗑️  Deleting: ${skillName}`);
+
+      // Find all keys related to this skill
+      const keysToDelete = remoteKeys.filter(key => {
+        // Match skills/name.skill
+        if (key === `skills/${skillName}.skill`) return true;
+        // Match skills/name/... (directory contents)
+        if (key.startsWith(`skills/${skillName}/`)) return true;
+        return false;
+      });
+
+      for (const key of keysToDelete) {
+        await deleteFromR2(key);
+        console.log(`   ✓ Deleted: ${key}`);
+      }
+
+      // Remove from config
+      configJson.skills = configJson.skills.filter(s => s.name !== skillName);
+    }
+  } else {
+    console.log('No deleted skills found.');
   }
 
   // Save updated config.json locally

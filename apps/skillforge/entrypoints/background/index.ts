@@ -5,9 +5,10 @@ import {
   cachedSkillsItem,
   getManagedSkills,
   lastSyncTimeItem,
+  removeManagedSkill,
   syncResultsItem,
 } from '../../lib/storage';
-import { getOrganizationId, isUserLoggedIn, listSkills, toggleSkill } from './api-client';
+import { deleteSkill, getOrganizationId, isUserLoggedIn, listSkills, toggleSkill } from './api-client';
 import {
   getSkillStates,
   getPendingCounts,
@@ -68,6 +69,9 @@ async function handleMessage(message: Message): Promise<unknown> {
 
     case 'TOGGLE_SKILL':
       return handleToggleSkill(message.skillId, message.enabled);
+
+    case 'DELETE_SKILL':
+      return handleDeleteSkill(message.skillId, message.skillName);
 
     case 'GET_PENDING':
       return getPendingCounts();
@@ -172,6 +176,26 @@ async function handleToggleSkill(skillId: string, enabled: boolean): Promise<voi
   }
 
   await toggleSkill(orgId, skillId, enabled);
+
+  // Refresh skills cache
+  const skills = await listSkills(orgId);
+  await cachedSkillsItem.setValue(skills);
+}
+
+/**
+ * Delete a skill
+ */
+async function handleDeleteSkill(skillId: string, skillName: string): Promise<void> {
+  const orgId = await getOrganizationId();
+  if (!orgId) {
+    throw new Error('Not logged in');
+  }
+
+  // Delete from Claude.ai
+  await deleteSkill(orgId, skillId);
+
+  // Remove from managed skills tracking
+  await removeManagedSkill(skillName);
 
   // Refresh skills cache
   const skills = await listSkills(orgId);

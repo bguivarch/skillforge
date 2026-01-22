@@ -22,6 +22,8 @@ export const ENDPOINTS = {
     `${CLAUDE_API_BASE}/organizations/${orgId}/skills/enable-skill`,
   disableSkill: (orgId: string) =>
     `${CLAUDE_API_BASE}/organizations/${orgId}/skills/disable-skill`,
+  deleteSkill: (orgId: string) =>
+    `${CLAUDE_API_BASE}/organizations/${orgId}/skills/delete-skill`,
 } as const;
 
 /**

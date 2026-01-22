@@ -100,3 +100,12 @@ export async function setManagedSkill(
 export async function getManagedSkills(): Promise<Record<string, ManagedSkill>> {
   return managedSkillsItem.getValue();
 }
+
+/**
+ * Remove a managed skill from tracking
+ */
+export async function removeManagedSkill(name: string): Promise<void> {
+  const managed = await managedSkillsItem.getValue();
+  delete managed[name];
+  await managedSkillsItem.setValue(managed);
+}

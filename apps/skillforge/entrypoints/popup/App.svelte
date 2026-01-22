@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { StatusResponse, SyncResult, SkillWithState } from '../../lib/types';
-  import { getStatus, triggerSync, toggleSkill, syncSingleSkill } from '../../lib/messaging';
+  import { getStatus, triggerSync, toggleSkill, syncSingleSkill, deleteSkill } from '../../lib/messaging';
   import LoginPrompt from '../../components/LoginPrompt.svelte';
   import PendingAlert from '../../components/PendingAlert.svelte';
   import SkillCard from '../../components/SkillCard.svelte';
@@ -12,6 +12,7 @@
   let syncing = $state(false);
   let toggleLoadingId = $state<string | null>(null);
   let updatingSkillName = $state<string | null>(null);
+  let deletingSkillId = $state<string | null>(null);
   let error = $state<string | null>(null);
   let status = $state<StatusResponse | null>(null);
   let showResults = $state(false);
@@ -102,6 +103,21 @@
       console.error('[SkillForge] Update failed:', e);
     } finally {
       updatingSkillName = null;
+    }
+  }
+
+  async function handleDelete(skillId: string, skillName: string) {
+    deletingSkillId = skillId;
+    error = null;
+
+    try {
+      await deleteSkill(skillId, skillName);
+      await loadStatus(false);
+    } catch (e) {
+      error = 'Failed to delete skill';
+      console.error('[SkillForge] Delete failed:', e);
+    } finally {
+      deletingSkillId = null;
     }
   }
 
@@ -220,8 +236,10 @@
                 {skillWithState}
                 onToggle={handleToggle}
                 onUpdate={handleUpdate}
+                onDelete={handleDelete}
                 toggleLoading={toggleLoadingId === skillWithState.skill.id}
                 updateLoading={updatingSkillName === skillWithState.skill.name}
+                deleteLoading={deletingSkillId === skillWithState.skill.id}
               />
             {/each}
           </div>
@@ -238,8 +256,10 @@
                 {skillWithState}
                 onToggle={handleToggle}
                 onUpdate={handleUpdate}
+                onDelete={handleDelete}
                 toggleLoading={toggleLoadingId === skillWithState.skill.id}
                 updateLoading={updatingSkillName === skillWithState.skill.name}
+                deleteLoading={deletingSkillId === skillWithState.skill.id}
               />
             {/each}
           </div>

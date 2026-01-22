@@ -7,11 +7,13 @@
     skillWithState: SkillWithState;
     onToggle: (skillId: string, enabled: boolean) => void;
     onUpdate?: (skillName: string) => void;
+    onDelete?: (skillId: string, skillName: string) => void;
     toggleLoading?: boolean;
     updateLoading?: boolean;
+    deleteLoading?: boolean;
   }
 
-  let { skillWithState, onToggle, onUpdate, toggleLoading = false, updateLoading = false }: Props = $props();
+  let { skillWithState, onToggle, onUpdate, onDelete, toggleLoading = false, updateLoading = false, deleteLoading = false }: Props = $props();
 
   const { skill, state, config } = $derived(skillWithState);
   const isLocked = $derived(config?.allowUserToggle === false);
@@ -24,6 +26,12 @@
   function handleUpdate() {
     if (onUpdate && state === 'outdated') {
       onUpdate(skill.name);
+    }
+  }
+
+  function handleDelete() {
+    if (onDelete && state === 'orphaned') {
+      onDelete(skill.id, skill.name);
     }
   }
 </script>
@@ -54,7 +62,16 @@
 
   {#if state === 'orphaned'}
     <div class="orphan-warning">
-      This skill is no longer managed by your company. It may be outdated or deprecated.
+      <span>This skill is no longer managed by your company. It may be outdated or deprecated.</span>
+      {#if onDelete}
+        <button class="delete-btn" onclick={handleDelete} disabled={deleteLoading}>
+          {#if deleteLoading}
+            Removing...
+          {:else}
+            Remove
+          {/if}
+        </button>
+      {/if}
     </div>
   {/if}
 </div>
@@ -132,5 +149,35 @@
     font-size: 11px;
     color: var(--color-destructive-foreground);
     line-height: 1.4;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .orphan-warning span {
+    flex: 1;
+  }
+
+  .delete-btn {
+    flex-shrink: 0;
+    padding: 4px 8px;
+    font-size: 11px;
+    font-weight: 500;
+    border-radius: 4px;
+    border: none;
+    background: rgba(153, 27, 27, 0.8);
+    color: white;
+    cursor: pointer;
+    transition: background 0.2s ease;
+  }
+
+  .delete-btn:hover:not(:disabled) {
+    background: rgba(153, 27, 27, 1);
+  }
+
+  .delete-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
   }
 </style>

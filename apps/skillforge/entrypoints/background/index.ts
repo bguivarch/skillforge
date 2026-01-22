@@ -106,7 +106,7 @@ async function handleGetStatus(): Promise<StatusResponse> {
       skills: [],
       lastSyncTime: null,
       syncResults: [],
-      pendingCounts: { newCount: 0, updateCount: 0 },
+      pendingCounts: { newCount: 0, updateCount: 0, newSkillNames: [], updatedSkillNames: [] },
     };
   }
 

@@ -370,7 +370,7 @@ export async function getSkillStates(
  * Calculate and update pending counts (new skills vs updates)
  */
 export async function updatePendingCounts(): Promise<PendingCounts> {
-  const zeroCounts: PendingCounts = { newCount: 0, updateCount: 0 };
+  const zeroCounts: PendingCounts = { newCount: 0, updateCount: 0, newSkillNames: [], updatedSkillNames: [] };
 
   try {
     const orgId = await getOrganizationId();
@@ -389,8 +389,8 @@ export async function updatePendingCounts(): Promise<PendingCounts> {
     const existingNames = new Set(existingSkills.map(s => s.name.toLowerCase()));
     const managedSkills = await getManagedSkills();
 
-    let newCount = 0;
-    let updateCount = 0;
+    const newSkillNames: string[] = [];
+    const updatedSkillNames: string[] = [];
 
     for (const skillConfig of config.skills) {
       const exists = existingNames.has(skillConfig.name.toLowerCase());
@@ -398,14 +398,19 @@ export async function updatePendingCounts(): Promise<PendingCounts> {
 
       if (!exists) {
         // New skill available
-        newCount++;
+        newSkillNames.push(skillConfig.name);
       } else if (managed && skillConfig.version !== managed.version) {
         // Skill exists but version is outdated
-        updateCount++;
+        updatedSkillNames.push(skillConfig.name);
       }
     }
 
-    const counts: PendingCounts = { newCount, updateCount };
+    const counts: PendingCounts = {
+      newCount: newSkillNames.length,
+      updateCount: updatedSkillNames.length,
+      newSkillNames,
+      updatedSkillNames,
+    };
     await pendingCountsItem.setValue(counts);
     return counts;
   } catch (error) {

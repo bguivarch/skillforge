@@ -63,7 +63,7 @@
         }, 5000);
       }
 
-      await loadStatus();
+      await loadStatus(false);
     } catch (e) {
       error = 'Sync failed unexpectedly';
       console.error('[SkillForge] Sync failed:', e);

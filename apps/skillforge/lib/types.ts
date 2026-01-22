@@ -99,6 +99,8 @@ export interface SyncEngineResult {
 export interface PendingCounts {
   newCount: number;
   updateCount: number;
+  newSkillNames: string[];
+  updatedSkillNames: string[];
 }
 
 /**

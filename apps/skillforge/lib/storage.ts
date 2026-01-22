@@ -47,7 +47,7 @@ export const managedSkillsItem = storage.defineItem<Record<string, ManagedSkill>
  */
 export const pendingCountsItem = storage.defineItem<PendingCounts>(
   `local:${STORAGE_KEYS.pendingCounts}`,
-  { fallback: { newCount: 0, updateCount: 0 } }
+  { fallback: { newCount: 0, updateCount: 0, newSkillNames: [], updatedSkillNames: [] } }
 );
 
 /**

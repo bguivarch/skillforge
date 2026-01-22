@@ -14,17 +14,26 @@ export class ConfigError extends Error {
 }
 
 /**
+ * Add cache-busting query parameter to a URL
+ */
+function addCacheBuster(url: string): string {
+  const separator = url.includes('?') ? '&' : '?';
+  return `${url}${separator}_cb=${Date.now()}`;
+}
+
+/**
  * Fetch and validate config from R2
  */
 export async function fetchConfig(): Promise<SkillsConfig> {
   let response: Response;
 
   try {
-    response = await fetch(CONFIG_URL, {
+    response = await fetch(addCacheBuster(CONFIG_URL), {
       method: 'GET',
       headers: {
         Accept: 'application/json',
       },
+      cache: 'no-store',
     });
   } catch (error) {
     throw new ConfigError(`Failed to fetch config: ${error}`);
@@ -124,8 +133,9 @@ async function extractSkillMdFromZip(blob: Blob): Promise<string | null> {
 async function resolveSkillFile(skill: SkillConfig): Promise<SkillContent> {
   let response: Response;
   try {
-    response = await fetch(skill.source, {
+    response = await fetch(addCacheBuster(skill.source), {
       method: 'GET',
+      cache: 'no-store',
     });
   } catch (error) {
     throw new ConfigError(`Failed to fetch skill file for "${skill.name}": ${error}`);
@@ -173,11 +183,12 @@ export async function resolveSkillContent(skill: SkillConfig): Promise<SkillCont
   // Handle SKILL.md files
   let response: Response;
   try {
-    response = await fetch(skill.source, {
+    response = await fetch(addCacheBuster(skill.source), {
       method: 'GET',
       headers: {
         Accept: 'text/plain, text/markdown',
       },
+      cache: 'no-store',
     });
   } catch (error) {
     throw new ConfigError(`Failed to fetch skill source for "${skill.name}": ${error}`);

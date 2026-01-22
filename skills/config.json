@@ -1,0 +1,34 @@
+{
+  "name": "SkillForge Demo Pack",
+  "version": "1.0.0",
+  "skills": [
+    {
+      "name": "code-review",
+      "description": "Review code for best practices and potential issues",
+      "source": "${R2_PUBLIC_URL}/skills/code-review/SKILL.md",
+      "enabledByDefault": true,
+      "allowUserToggle": true
+    },
+    {
+      "name": "meeting-notes",
+      "description": "Summarize meeting notes into action items",
+      "source": "${R2_PUBLIC_URL}/skills/meeting-notes/SKILL.md",
+      "enabledByDefault": true,
+      "allowUserToggle": true
+    },
+    {
+      "name": "writing-assistant",
+      "description": "Help improve writing clarity and tone",
+      "source": "${R2_PUBLIC_URL}/skills/writing-assistant/SKILL.md",
+      "enabledByDefault": false,
+      "allowUserToggle": true
+    },
+    {
+      "name": "client-email",
+      "description": "Write professional emails to clients",
+      "source": "${R2_PUBLIC_URL}/skills/client-email/SKILL.md",
+      "enabledByDefault": true,
+      "allowUserToggle": true
+    }
+  ]
+}

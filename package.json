@@ -1,0 +1,22 @@
+{
+  "name": "skillforge",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm --filter @skillforge/extension dev",
+    "build": "pnpm --filter @skillforge/extension build",
+    "zip": "pnpm --filter @skillforge/extension zip",
+    "typecheck": "pnpm --filter @skillforge/extension typecheck",
+    "upload-skills": "tsx scripts/upload-skills.ts"
+  },
+  "devDependencies": {
+    "@aws-sdk/client-s3": "^3.705.0",
+    "dotenv": "^16.4.7",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  }
+}

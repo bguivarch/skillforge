@@ -86,11 +86,48 @@ export async function listSkills(orgId: string): Promise<ClaudeSkill[]> {
 
 /**
  * Create a new skill
+ * If skillFileBlob is available, uses upload-skill endpoint to preserve full .skill structure
+ * Otherwise falls back to create-simple-skill JSON endpoint
  */
 export async function createSkill(
   orgId: string,
   skill: SkillContent
 ): Promise<ClaudeSkill> {
+  // If we have a pre-packaged .skill file, use upload endpoint to preserve all files
+  if (skill.skillFileBlob) {
+    const url = ENDPOINTS.uploadSkill(orgId, false); // overwrite=false for new skills
+
+    const skillFile = new File([skill.skillFileBlob], `${skill.name}.skill`, {
+      type: 'application/octet-stream',
+    });
+
+    const formData = new FormData();
+    formData.append('file', skillFile);
+
+    const response = await fetch(url, {
+      method: 'POST',
+      credentials: 'include',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const isAuth = response.status === 401 || response.status === 403;
+      throw new ClaudeApiError(
+        `Failed to create skill: ${response.status} ${response.statusText}`,
+        response.status,
+        isAuth
+      );
+    }
+
+    const text = await response.text();
+    if (!text) {
+      throw new ClaudeApiError('Empty response from upload-skill endpoint');
+    }
+
+    return JSON.parse(text);
+  }
+
+  // Fallback: simple skill via JSON endpoint
   const url = ENDPOINTS.createSkill(orgId);
   return apiRequest<ClaudeSkill>(url, {
     method: 'POST',
@@ -141,6 +178,7 @@ export async function toggleSkill(
 
 /**
  * Create a .skill file (ZIP containing {name}/SKILL.md)
+ * Uses Unix platform and no directory entries to match Claude's expected format
  */
 async function createSkillFile(skill: SkillContent): Promise<Blob> {
   const zip = new JSZip();
@@ -154,9 +192,16 @@ description: ${skill.description}
 ${skill.instructions}`;
 
   // Add to zip as {skillName}/SKILL.md
-  zip.file(`${skill.name}/SKILL.md`, skillContent);
+  // IMPORTANT: createFolders: false to avoid explicit directory entries
+  zip.file(`${skill.name}/SKILL.md`, skillContent, { createFolders: false });
 
-  return zip.generateAsync({ type: 'blob' });
+  // Use platform: 'UNIX' to match Claude's expected format
+  return zip.generateAsync({
+    type: 'blob',
+    compression: 'DEFLATE',
+    compressionOptions: { level: 9 },
+    platform: 'UNIX',
+  });
 }
 
 /**
@@ -168,8 +213,16 @@ export async function updateSkill(
 ): Promise<ClaudeSkill> {
   const url = ENDPOINTS.uploadSkill(orgId, true);
 
-  // Create the .skill ZIP file
-  const skillBlob = await createSkillFile(skill);
+  // Use pre-packaged .skill file if available, otherwise create one
+  let skillBlob: Blob;
+  if (skill.skillFileBlob) {
+    // Use the pre-packaged .skill file directly
+    skillBlob = skill.skillFileBlob;
+  } else {
+    // Create a simple .skill ZIP file
+    skillBlob = await createSkillFile(skill);
+  }
+
   const skillFile = new File([skillBlob], `${skill.name}.skill`, {
     type: 'application/octet-stream',
   });

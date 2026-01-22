@@ -21,11 +21,17 @@ export interface SkillsConfig {
 
 /**
  * Resolved skill content (after fetching source)
+ * Can be either simple (instructions only) or complex (pre-packaged .skill file)
  */
 export interface SkillContent {
   name: string;
   description: string;
   instructions: string;
+  /**
+   * Pre-packaged .skill file blob (for complex skills with multiple files)
+   * When present, this is uploaded directly instead of creating a new ZIP
+   */
+  skillFileBlob?: Blob;
 }
 
 /**

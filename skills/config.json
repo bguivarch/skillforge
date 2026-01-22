@@ -20,8 +20,8 @@
     },
     {
       "name": "writing-assistant",
-      "version": "1.0.1",
-      "description": "Help improve writing clarity and tone according to our brand guidelines",
+      "version": "1.0.0",
+      "description": "Help improve writing clarity and tone",
       "source": "${R2_PUBLIC_URL}/skills/writing-assistant/SKILL.md",
       "enabledByDefault": false,
       "allowUserToggle": true

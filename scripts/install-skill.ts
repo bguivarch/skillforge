@@ -167,6 +167,31 @@ interface DiscoveredSkill {
   version: string;
   folderPath: string;
   folderName: string;
+  isComplex: boolean;
+  fileCount: number;
+}
+
+/**
+ * Recursively count all files in a directory (excluding hidden files)
+ */
+function countFiles(dir: string): number {
+  let count = 0;
+  const items = fs.readdirSync(dir);
+
+  for (const item of items) {
+    if (item.startsWith('.')) continue;
+
+    const fullPath = path.join(dir, item);
+    const stat = fs.statSync(fullPath);
+
+    if (stat.isDirectory()) {
+      count += countFiles(fullPath);
+    } else {
+      count++;
+    }
+  }
+
+  return count;
 }
 
 function discoverSkills(repoDir: string): DiscoveredSkill[] {
@@ -181,12 +206,15 @@ function discoverSkills(repoDir: string): DiscoveredSkill[] {
       const content = fs.readFileSync(rootSkillMd, 'utf-8');
       const metadata = parseSkillMd(content);
       const repoName = path.basename(repoDir);
+      const fileCount = countFiles(repoDir);
       skills.push({
         name: metadata.name || repoName,
         description: metadata.description || '',
         version: metadata.version || '1.0.0',
         folderPath: repoDir,
         folderName: metadata.name || repoName,
+        isComplex: fileCount > 1,
+        fileCount,
       });
     }
     return skills;
@@ -204,6 +232,7 @@ function discoverSkills(repoDir: string): DiscoveredSkill[] {
     if (fs.existsSync(skillMdPath)) {
       const content = fs.readFileSync(skillMdPath, 'utf-8');
       const metadata = parseSkillMd(content);
+      const fileCount = countFiles(skillPath);
 
       skills.push({
         name: metadata.name || entry.name,
@@ -211,6 +240,8 @@ function discoverSkills(repoDir: string): DiscoveredSkill[] {
         version: metadata.version || '1.0.0',
         folderPath: skillPath,
         folderName: entry.name,
+        isComplex: fileCount > 1,
+        fileCount,
       });
     }
   }
@@ -290,11 +321,16 @@ function updateConfigJson(skill: DiscoveredSkill, configPath: string): void {
   // Check if skill already exists
   const existingIndex = config.skills.findIndex((s) => s.name === skill.name);
 
+  // Use .skill file for complex skills, SKILL.md for simple skills
+  const source = skill.isComplex
+    ? `\${R2_PUBLIC_URL}/skills/${skill.name}.skill`
+    : `\${R2_PUBLIC_URL}/skills/${skill.name}/SKILL.md`;
+
   const skillConfig: SkillConfig = {
     name: skill.name,
     version: skill.version,
     description: skill.description,
-    source: `\${R2_PUBLIC_URL}/skills/${skill.name}/SKILL.md`,
+    source,
     enabledByDefault: true,
     allowUserToggle: true,
   };
@@ -352,7 +388,10 @@ async function main(): Promise<void> {
     }
 
     console.log(`Found ${skills.length} skill(s):`);
-    skills.forEach((s) => console.log(`  - ${s.name}: ${s.description || 'No description'}`));
+    skills.forEach((s) => {
+      const typeLabel = s.isComplex ? `complex, ${s.fileCount} files` : 'simple';
+      console.log(`  - ${s.name} (${typeLabel}): ${s.description || 'No description'}`);
+    });
 
     // Select skill
     let selectedSkill: DiscoveredSkill;

@@ -17,6 +17,9 @@ importers:
       dotenv:
         specifier: ^16.4.7
         version: 16.6.1
+      jszip:
+        specifier: ^3.10.1
+        version: 3.10.1
       tsx:
         specifier: ^4.19.2
         version: 4.21.0

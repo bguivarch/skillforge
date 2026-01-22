@@ -1,3 +1,4 @@
+import JSZip from 'jszip';
 import type { SkillConfig, SkillContent, SkillsConfig } from './types';
 import { parseSkillMd, isSkillMdFormat } from './skill-parser';
 import { CONFIG_URL } from './constants';
@@ -79,9 +80,97 @@ function isValidSkillConfig(skill: unknown): skill is SkillConfig {
 }
 
 /**
- * Resolve skill content from SKILL.md source
+ * Check if a URL points to a .skill file
+ */
+function isSkillFileUrl(url: string): boolean {
+  try {
+    const pathname = new URL(url).pathname;
+    return pathname.toLowerCase().endsWith('.skill');
+  } catch {
+    return url.toLowerCase().endsWith('.skill');
+  }
+}
+
+/**
+ * Extract SKILL.md content from a .skill ZIP file
+ */
+async function extractSkillMdFromZip(blob: Blob): Promise<string | null> {
+  try {
+    const zip = await JSZip.loadAsync(blob);
+
+    // Find SKILL.md file (could be at root or in a subdirectory like {name}/SKILL.md)
+    let skillMdFile: JSZip.JSZipObject | null = null;
+
+    zip.forEach((relativePath, file) => {
+      if (relativePath.toLowerCase().endsWith('skill.md') && !file.dir) {
+        skillMdFile = file;
+      }
+    });
+
+    if (skillMdFile) {
+      return await (skillMdFile as JSZip.JSZipObject).async('string');
+    }
+
+    return null;
+  } catch (error) {
+    console.error('[SkillForge] Failed to extract SKILL.md from ZIP:', error);
+    return null;
+  }
+}
+
+/**
+ * Resolve skill content from a pre-packaged .skill file
+ */
+async function resolveSkillFile(skill: SkillConfig): Promise<SkillContent> {
+  let response: Response;
+  try {
+    response = await fetch(skill.source, {
+      method: 'GET',
+    });
+  } catch (error) {
+    throw new ConfigError(`Failed to fetch skill file for "${skill.name}": ${error}`);
+  }
+
+  if (!response.ok) {
+    throw new ConfigError(
+      `Failed to fetch skill file for "${skill.name}": ${response.status} ${response.statusText}`
+    );
+  }
+
+  const blob = await response.blob();
+
+  // Extract SKILL.md from the ZIP to get metadata
+  const skillMdContent = await extractSkillMdFromZip(blob);
+
+  if (skillMdContent && isSkillMdFormat(skillMdContent)) {
+    const parsed = parseSkillMd(skillMdContent);
+    return {
+      name: parsed.name || skill.name,
+      description: parsed.description || skill.description,
+      instructions: parsed.instructions,
+      skillFileBlob: blob,
+    };
+  }
+
+  // Fallback: use config values if SKILL.md extraction failed
+  return {
+    name: skill.name,
+    description: skill.description,
+    instructions: skillMdContent || '',
+    skillFileBlob: blob,
+  };
+}
+
+/**
+ * Resolve skill content from SKILL.md source or pre-packaged .skill file
  */
 export async function resolveSkillContent(skill: SkillConfig): Promise<SkillContent> {
+  // Handle pre-packaged .skill files
+  if (isSkillFileUrl(skill.source)) {
+    return resolveSkillFile(skill);
+  }
+
+  // Handle SKILL.md files
   let response: Response;
   try {
     response = await fetch(skill.source, {

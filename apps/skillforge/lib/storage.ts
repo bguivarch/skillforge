@@ -1,5 +1,5 @@
 import { storage } from 'wxt/storage';
-import type { ClaudeSkill, ManagedSkill, SkillsConfig, SyncResult } from './types';
+import type { ClaudeSkill, ManagedSkill, PendingCounts, SkillsConfig, SyncResult } from './types';
 import { STORAGE_KEYS } from './constants';
 
 /**
@@ -43,11 +43,11 @@ export const managedSkillsItem = storage.defineItem<Record<string, ManagedSkill>
 );
 
 /**
- * Number of skills pending sync
+ * Counts of new and updated skills pending sync
  */
-export const pendingCountItem = storage.defineItem<number>(
-  `local:${STORAGE_KEYS.pendingCount}`,
-  { fallback: 0 }
+export const pendingCountsItem = storage.defineItem<PendingCounts>(
+  `local:${STORAGE_KEYS.pendingCounts}`,
+  { fallback: { newCount: 0, updateCount: 0 } }
 );
 
 /**
@@ -71,17 +71,20 @@ export async function updateSyncStatus(
  */
 export async function setManagedSkill(
   name: string,
+  version: string,
   contentHash: string
 ): Promise<void> {
   const managed = await managedSkillsItem.getValue();
   const now = Date.now();
 
   if (managed[name]) {
+    managed[name].version = version;
     managed[name].contentHash = contentHash;
     managed[name].updatedAt = now;
   } else {
     managed[name] = {
       name,
+      version,
       contentHash,
       installedAt: now,
       updatedAt: now,

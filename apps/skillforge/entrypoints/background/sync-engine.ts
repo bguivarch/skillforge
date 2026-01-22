@@ -1,6 +1,7 @@
 import type {
   ClaudeSkill,
   ManagedSkill,
+  PendingCounts,
   SkillConfig,
   SkillState,
   SkillWithState,
@@ -20,7 +21,7 @@ import {
   getManagedSkills,
   lastSyncTimeItem,
   managedSkillsItem,
-  pendingCountItem,
+  pendingCountsItem,
   setManagedSkill,
   syncResultsItem,
 } from '../../lib/storage';
@@ -28,6 +29,7 @@ import {
   getOrganizationId,
   listSkills,
   createSkill,
+  updateSkill,
   disableSkill,
   ClaudeApiError,
 } from './api-client';
@@ -85,29 +87,51 @@ export async function runSync(): Promise<SyncEngineResult> {
           // Skill already exists
           const managed = managedSkills[skillConfig.name];
 
-          if (managed && managed.contentHash === newHash) {
+          // Check if update is needed by comparing versions
+          const needsUpdate = managed
+            ? skillConfig.version !== managed.version
+            : true; // If not managed, check content hash
+
+          if (managed && !needsUpdate && managed.contentHash === newHash) {
             // No changes
             results.push({
               skillName: skillConfig.name,
               action: 'skipped',
               message: 'Already up to date',
             });
+          } else if (needsUpdate || managed?.contentHash !== newHash) {
+            // Version changed or content changed - update the skill
+            try {
+              await updateSkill(orgId, content);
+              await setManagedSkill(skillConfig.name, skillConfig.version, newHash);
+              results.push({
+                skillName: skillConfig.name,
+                action: 'updated',
+                message: `Updated to v${skillConfig.version}`,
+              });
+            } catch (updateError) {
+              console.warn('[SkillForge] Failed to update skill:', updateError);
+              results.push({
+                skillName: skillConfig.name,
+                action: 'error',
+                message: updateError instanceof Error ? updateError.message : 'Update failed',
+              });
+            }
           } else {
-            // Content changed - update managed record
-            // Note: Claude.ai may not support updating skills, so we just track the change
-            await setManagedSkill(skillConfig.name, newHash);
+            // Already exists but not managed - track it
+            await setManagedSkill(skillConfig.name, skillConfig.version, newHash);
             results.push({
               skillName: skillConfig.name,
               action: 'skipped',
-              message: managed ? 'Content changed (manual update required)' : 'Already exists',
+              message: 'Already exists, now tracked',
             });
           }
         } else {
           // Create new skill
           const created = await createSkill(orgId, content);
 
-          // Track as managed
-          await setManagedSkill(skillConfig.name, newHash);
+          // Track as managed with version
+          await setManagedSkill(skillConfig.name, skillConfig.version, newHash);
 
           // Disable if enabledByDefault is false
           if (skillConfig.enabledByDefault === false) {
@@ -121,6 +145,7 @@ export async function runSync(): Promise<SyncEngineResult> {
           results.push({
             skillName: skillConfig.name,
             action: 'created',
+            message: `v${skillConfig.version}`,
           });
         }
       } catch (error) {
@@ -143,8 +168,8 @@ export async function runSync(): Promise<SyncEngineResult> {
       cachedConfigItem.setValue(config),
     ]);
 
-    // 8. Update pending count
-    await updatePendingCount();
+    // 8. Update pending counts
+    await updatePendingCounts();
 
     return {
       success: true,
@@ -163,6 +188,127 @@ export async function runSync(): Promise<SyncEngineResult> {
       success: false,
       results,
       error: error instanceof Error ? error.message : 'Sync failed',
+    };
+  }
+}
+
+/**
+ * Sync a single skill by name
+ */
+export async function syncSingleSkill(skillName: string): Promise<SyncResult> {
+  try {
+    // 1. Get organization ID
+    const orgId = await getOrganizationId();
+    if (!orgId) {
+      return {
+        skillName,
+        action: 'error',
+        message: 'Not logged in to Claude.ai',
+      };
+    }
+
+    // 2. Fetch config from R2
+    let config: SkillsConfig;
+    try {
+      config = await fetchConfig();
+    } catch (error) {
+      return {
+        skillName,
+        action: 'error',
+        message: error instanceof ConfigError ? error.message : 'Failed to fetch config',
+      };
+    }
+
+    // 3. Find the skill config
+    const skillConfig = config.skills.find(
+      s => s.name.toLowerCase() === skillName.toLowerCase()
+    );
+    if (!skillConfig) {
+      return {
+        skillName,
+        action: 'error',
+        message: 'Skill not found in config',
+      };
+    }
+
+    // 4. Get existing skills from Claude.ai
+    const existingSkills = await listSkills(orgId);
+    const existing = existingSkills.find(
+      s => s.name.toLowerCase() === skillName.toLowerCase()
+    );
+
+    // 5. Get managed skills from storage
+    const managedSkills = await getManagedSkills();
+
+    // 6. Resolve skill content
+    const content = await resolveSkillContent(skillConfig);
+    const newHash = await hashContent(content.instructions);
+
+    let result: SyncResult;
+
+    if (existing) {
+      // Update existing skill
+      try {
+        await updateSkill(orgId, content);
+        await setManagedSkill(skillConfig.name, skillConfig.version, newHash);
+        result = {
+          skillName: skillConfig.name,
+          action: 'updated',
+          message: `Updated to v${skillConfig.version}`,
+        };
+      } catch (updateError) {
+        result = {
+          skillName: skillConfig.name,
+          action: 'error',
+          message: updateError instanceof Error ? updateError.message : 'Update failed',
+        };
+      }
+    } else {
+      // Create new skill
+      const created = await createSkill(orgId, content);
+      await setManagedSkill(skillConfig.name, skillConfig.version, newHash);
+
+      // Only apply enabledByDefault for NEW skills
+      if (skillConfig.enabledByDefault === false) {
+        try {
+          await disableSkill(orgId, created.id);
+        } catch (e) {
+          console.warn('[SkillForge] Failed to disable skill:', e);
+        }
+      }
+
+      result = {
+        skillName: skillConfig.name,
+        action: 'created',
+        message: `v${skillConfig.version}`,
+      };
+    }
+
+    // 7. Refresh skills list and update storage
+    const updatedSkills = await listSkills(orgId);
+    await Promise.all([
+      cachedSkillsItem.setValue(updatedSkills),
+      cachedConfigItem.setValue(config),
+    ]);
+
+    // 8. Update pending counts and badge
+    await updatePendingCounts();
+    await updateBadge();
+
+    return result;
+  } catch (error) {
+    if (error instanceof ClaudeApiError && error.isAuthError) {
+      return {
+        skillName,
+        action: 'error',
+        message: 'Authentication failed. Please log in to Claude.ai.',
+      };
+    }
+
+    return {
+      skillName,
+      action: 'error',
+      message: error instanceof Error ? error.message : 'Sync failed',
     };
   }
 }
@@ -189,10 +335,12 @@ export async function getSkillStates(
 
     if (managed) {
       if (skillConfig) {
-        // In managed list and in config
-        // Check if content hash matches (would need to fetch and compare)
-        // For now, assume managed = up to date
-        state = 'managed';
+        // In managed list and in config - check if version matches
+        if (skillConfig.version !== managed.version) {
+          state = 'outdated';
+        } else {
+          state = 'managed';
+        }
       } else {
         // In managed list but not in config - orphaned
         state = 'orphaned';
@@ -219,27 +367,30 @@ export async function getSkillStates(
 }
 
 /**
- * Calculate and update pending count
+ * Calculate and update pending counts (new skills vs updates)
  */
-export async function updatePendingCount(): Promise<number> {
+export async function updatePendingCounts(): Promise<PendingCounts> {
+  const zeroCounts: PendingCounts = { newCount: 0, updateCount: 0 };
+
   try {
     const orgId = await getOrganizationId();
     if (!orgId) {
-      await pendingCountItem.setValue(0);
-      return 0;
+      await pendingCountsItem.setValue(zeroCounts);
+      return zeroCounts;
     }
 
     const config = await cachedConfigItem.getValue();
     if (!config) {
-      await pendingCountItem.setValue(0);
-      return 0;
+      await pendingCountsItem.setValue(zeroCounts);
+      return zeroCounts;
     }
 
     const existingSkills = await cachedSkillsItem.getValue();
     const existingNames = new Set(existingSkills.map(s => s.name.toLowerCase()));
     const managedSkills = await getManagedSkills();
 
-    let pending = 0;
+    let newCount = 0;
+    let updateCount = 0;
 
     for (const skillConfig of config.skills) {
       const exists = existingNames.has(skillConfig.name.toLowerCase());
@@ -247,36 +398,38 @@ export async function updatePendingCount(): Promise<number> {
 
       if (!exists) {
         // New skill available
-        pending++;
-      } else if (managed) {
-        // Check if outdated (simplified - would need hash comparison)
-        // For now, we don't count updates as pending
+        newCount++;
+      } else if (managed && skillConfig.version !== managed.version) {
+        // Skill exists but version is outdated
+        updateCount++;
       }
     }
 
-    await pendingCountItem.setValue(pending);
-    return pending;
+    const counts: PendingCounts = { newCount, updateCount };
+    await pendingCountsItem.setValue(counts);
+    return counts;
   } catch (error) {
-    console.error('[SkillForge] Failed to update pending count:', error);
-    return 0;
+    console.error('[SkillForge] Failed to update pending counts:', error);
+    return zeroCounts;
   }
 }
 
 /**
- * Get current pending count
+ * Get current pending counts
  */
-export async function getPendingCount(): Promise<number> {
-  return pendingCountItem.getValue();
+export async function getPendingCounts(): Promise<PendingCounts> {
+  return pendingCountsItem.getValue();
 }
 
 /**
- * Update extension badge with pending count
+ * Update extension badge with total pending count
  */
 export async function updateBadge(): Promise<void> {
-  const count = await getPendingCount();
+  const counts = await getPendingCounts();
+  const total = counts.newCount + counts.updateCount;
 
-  if (count > 0) {
-    await browser.action.setBadgeText({ text: String(count) });
+  if (total > 0) {
+    await browser.action.setBadgeText({ text: String(total) });
     await browser.action.setBadgeBackgroundColor({ color: '#3b82f6' }); // blue
   } else {
     await browser.action.setBadgeText({ text: '' });

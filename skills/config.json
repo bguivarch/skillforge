@@ -4,6 +4,7 @@
   "skills": [
     {
       "name": "code-review",
+      "version": "1.0.0",
       "description": "Review code for best practices and potential issues",
       "source": "${R2_PUBLIC_URL}/skills/code-review/SKILL.md",
       "enabledByDefault": true,
@@ -11,6 +12,7 @@
     },
     {
       "name": "meeting-notes",
+      "version": "1.0.0",
       "description": "Summarize meeting notes into action items",
       "source": "${R2_PUBLIC_URL}/skills/meeting-notes/SKILL.md",
       "enabledByDefault": true,
@@ -18,13 +20,15 @@
     },
     {
       "name": "writing-assistant",
-      "description": "Help improve writing clarity and tone",
+      "version": "1.0.1",
+      "description": "Help improve writing clarity and tone according to our brand guidelines",
       "source": "${R2_PUBLIC_URL}/skills/writing-assistant/SKILL.md",
       "enabledByDefault": false,
       "allowUserToggle": true
     },
     {
       "name": "client-email",
+      "version": "1.0.0",
       "description": "Write professional emails to clients",
       "source": "${R2_PUBLIC_URL}/skills/client-email/SKILL.md",
       "enabledByDefault": true,

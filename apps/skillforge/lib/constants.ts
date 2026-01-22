@@ -16,6 +16,8 @@ export const ENDPOINTS = {
     `${CLAUDE_API_BASE}/organizations/${orgId}/skills/list-skills`,
   createSkill: (orgId: string) =>
     `${CLAUDE_API_BASE}/organizations/${orgId}/skills/create-simple-skill`,
+  uploadSkill: (orgId: string, overwrite: boolean = false) =>
+    `${CLAUDE_API_BASE}/organizations/${orgId}/skills/upload-skill${overwrite ? '?overwrite=true' : ''}`,
   enableSkill: (orgId: string) =>
     `${CLAUDE_API_BASE}/organizations/${orgId}/skills/enable-skill`,
   disableSkill: (orgId: string) =>
@@ -38,5 +40,5 @@ export const STORAGE_KEYS = {
   cachedSkills: 'cachedSkills',
   cachedConfig: 'cachedConfig',
   managedSkills: 'managedSkills',
-  pendingCount: 'pendingCount',
+  pendingCounts: 'pendingCounts',
 } as const;

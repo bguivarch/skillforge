@@ -1,5 +1,5 @@
 import { defineBackground } from 'wxt/sandbox';
-import type { AuthResponse, Message, StatusResponse, SyncEngineResult } from '../../lib/types';
+import type { AuthResponse, Message, StatusResponse, SyncEngineResult, SyncResult } from '../../lib/types';
 import {
   cachedConfigItem,
   cachedSkillsItem,
@@ -10,10 +10,11 @@ import {
 import { getOrganizationId, isUserLoggedIn, listSkills, toggleSkill } from './api-client';
 import {
   getSkillStates,
-  getPendingCount,
+  getPendingCounts,
   runSync,
+  syncSingleSkill,
   updateBadge,
-  updatePendingCount,
+  updatePendingCounts,
 } from './sync-engine';
 import { fetchConfig } from '../../lib/config-loader';
 
@@ -39,7 +40,7 @@ export default defineBackground(() => {
         const skills = await listSkills(orgId);
         await cachedSkillsItem.setValue(skills);
 
-        await updatePendingCount();
+        await updatePendingCounts();
         await updateBadge();
       }
     } catch (error) {
@@ -62,11 +63,14 @@ async function handleMessage(message: Message): Promise<unknown> {
     case 'SYNC_SKILLS':
       return handleSyncSkills();
 
+    case 'SYNC_SINGLE_SKILL':
+      return handleSyncSingleSkill(message.skillName);
+
     case 'TOGGLE_SKILL':
       return handleToggleSkill(message.skillId, message.enabled);
 
     case 'GET_PENDING':
-      return getPendingCount();
+      return getPendingCounts();
 
     default:
       console.warn('[SkillForge] Unknown message type:', message);
@@ -98,7 +102,7 @@ async function handleGetStatus(): Promise<StatusResponse> {
       skills: [],
       lastSyncTime: null,
       syncResults: [],
-      pendingCount: 0,
+      pendingCounts: { newCount: 0, updateCount: 0 },
     };
   }
 
@@ -127,7 +131,7 @@ async function handleGetStatus(): Promise<StatusResponse> {
   const managedSkills = await getManagedSkills();
   const skillsWithState = await getSkillStates(skills, config, managedSkills);
 
-  await updatePendingCount();
+  await updatePendingCounts();
   await updateBadge();
 
   return {
@@ -136,15 +140,24 @@ async function handleGetStatus(): Promise<StatusResponse> {
     skills: skillsWithState,
     lastSyncTime: await lastSyncTimeItem.getValue(),
     syncResults: await syncResultsItem.getValue(),
-    pendingCount: await getPendingCount(),
+    pendingCounts: await getPendingCounts(),
   };
 }
 
 /**
- * Run skill sync
+ * Run full skill sync
  */
 async function handleSyncSkills(): Promise<SyncEngineResult> {
   const result = await runSync();
+  await updateBadge();
+  return result;
+}
+
+/**
+ * Sync a single skill by name
+ */
+async function handleSyncSingleSkill(skillName: string): Promise<SyncResult> {
+  const result = await syncSingleSkill(skillName);
   await updateBadge();
   return result;
 }

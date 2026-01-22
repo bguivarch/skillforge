@@ -1,4 +1,4 @@
-import type { AuthResponse, StatusResponse, SyncEngineResult } from './types';
+import type { AuthResponse, PendingCounts, StatusResponse, SyncEngineResult, SyncResult } from './types';
 
 /**
  * Check if user is logged into Claude.ai
@@ -15,10 +15,17 @@ export async function getStatus(): Promise<StatusResponse> {
 }
 
 /**
- * Trigger skill sync
+ * Trigger full skill sync
  */
 export async function triggerSync(): Promise<SyncEngineResult> {
   return browser.runtime.sendMessage({ type: 'SYNC_SKILLS' });
+}
+
+/**
+ * Sync a single skill by name
+ */
+export async function syncSingleSkill(skillName: string): Promise<SyncResult> {
+  return browser.runtime.sendMessage({ type: 'SYNC_SINGLE_SKILL', skillName });
 }
 
 /**
@@ -29,8 +36,8 @@ export async function toggleSkill(skillId: string, enabled: boolean): Promise<vo
 }
 
 /**
- * Get pending skills count
+ * Get pending skills counts
  */
-export async function getPendingCount(): Promise<number> {
+export async function getPendingCounts(): Promise<PendingCounts> {
   return browser.runtime.sendMessage({ type: 'GET_PENDING' });
 }

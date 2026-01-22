@@ -1,3 +1,4 @@
+import JSZip from 'jszip';
 import type { ClaudeSkill, SkillContent } from '../../lib/types';
 import { ENDPOINTS, COOKIE_NAMES } from '../../lib/constants';
 
@@ -136,4 +137,68 @@ export async function toggleSkill(
   } else {
     await disableSkill(orgId, skillId);
   }
+}
+
+/**
+ * Create a .skill file (ZIP containing {name}/SKILL.md)
+ */
+async function createSkillFile(skill: SkillContent): Promise<Blob> {
+  const zip = new JSZip();
+
+  // Create the skill content with frontmatter
+  const skillContent = `---
+name: ${skill.name}
+description: ${skill.description}
+---
+
+${skill.instructions}`;
+
+  // Add to zip as {skillName}/SKILL.md
+  zip.file(`${skill.name}/SKILL.md`, skillContent);
+
+  return zip.generateAsync({ type: 'blob' });
+}
+
+/**
+ * Update an existing skill using upload-skill endpoint with overwrite
+ */
+export async function updateSkill(
+  orgId: string,
+  skill: SkillContent
+): Promise<ClaudeSkill> {
+  const url = ENDPOINTS.uploadSkill(orgId, true);
+
+  // Create the .skill ZIP file
+  const skillBlob = await createSkillFile(skill);
+  const skillFile = new File([skillBlob], `${skill.name}.skill`, {
+    type: 'application/octet-stream',
+  });
+
+  // Build multipart form data
+  const formData = new FormData();
+  formData.append('file', skillFile);
+  formData.append('overwrite', 'true');
+
+  const response = await fetch(url, {
+    method: 'POST',
+    credentials: 'include',
+    body: formData,
+    // Note: Don't set Content-Type header - browser will set it with boundary
+  });
+
+  if (!response.ok) {
+    const isAuth = response.status === 401 || response.status === 403;
+    throw new ClaudeApiError(
+      `Failed to update skill: ${response.status} ${response.statusText}`,
+      response.status,
+      isAuth
+    );
+  }
+
+  const text = await response.text();
+  if (!text) {
+    throw new ClaudeApiError('Empty response from upload-skill endpoint');
+  }
+
+  return JSON.parse(text);
 }

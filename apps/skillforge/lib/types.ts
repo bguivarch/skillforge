@@ -3,6 +3,7 @@
  */
 export interface SkillConfig {
   name: string;
+  version: string;
   description: string;
   instructions?: string;
   source?: string;
@@ -48,6 +49,7 @@ export interface ClaudeSkill {
  */
 export interface ManagedSkill {
   name: string;
+  version: string;
   contentHash: string;
   installedAt: number;
   updatedAt: number;
@@ -87,6 +89,14 @@ export interface SyncEngineResult {
 }
 
 /**
+ * Pending counts for new and updated skills
+ */
+export interface PendingCounts {
+  newCount: number;
+  updateCount: number;
+}
+
+/**
  * Status response for UI
  */
 export interface StatusResponse {
@@ -95,7 +105,7 @@ export interface StatusResponse {
   skills: SkillWithState[];
   lastSyncTime: number | null;
   syncResults: SyncResult[];
-  pendingCount: number;
+  pendingCounts: PendingCounts;
 }
 
 /**
@@ -113,5 +123,6 @@ export type Message =
   | { type: 'CHECK_AUTH' }
   | { type: 'GET_STATUS' }
   | { type: 'SYNC_SKILLS' }
+  | { type: 'SYNC_SINGLE_SKILL'; skillName: string }
   | { type: 'TOGGLE_SKILL'; skillId: string; enabled: boolean }
   | { type: 'GET_PENDING' };

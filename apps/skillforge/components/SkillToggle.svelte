@@ -3,13 +3,14 @@
     enabled: boolean;
     disabled?: boolean;
     locked?: boolean;
+    loading?: boolean;
     onToggle: (enabled: boolean) => void;
   }
 
-  let { enabled, disabled = false, locked = false, onToggle }: Props = $props();
+  let { enabled, disabled = false, locked = false, loading = false, onToggle }: Props = $props();
 
   function handleClick() {
-    if (!disabled && !locked) {
+    if (!disabled && !locked && !loading) {
       onToggle(!enabled);
     }
   }
@@ -18,13 +19,18 @@
 <button
   class="toggle"
   class:enabled
-  class:disabled={disabled || locked}
+  class:disabled={disabled || locked || loading}
+  class:loading
   onclick={handleClick}
-  title={locked ? 'Toggle disabled by admin' : enabled ? 'Disable skill' : 'Enable skill'}
+  title={locked ? 'Toggle disabled by admin' : loading ? 'Loading...' : enabled ? 'Disable skill' : 'Enable skill'}
   aria-pressed={enabled}
 >
   <span class="track">
-    <span class="thumb"></span>
+    <span class="thumb">
+      {#if loading}
+        <span class="spinner"></span>
+      {/if}
+    </span>
   </span>
   {#if locked}
     <span class="lock-icon">
@@ -84,5 +90,24 @@
     color: var(--color-muted);
     display: flex;
     align-items: center;
+  }
+
+  .spinner {
+    width: 10px;
+    height: 10px;
+    border: 1.5px solid var(--color-muted);
+    border-top-color: var(--color-foreground);
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+  }
+
+  @keyframes spin {
+    to {
+      transform: translate(-50%, -50%) rotate(360deg);
+    }
   }
 </style>

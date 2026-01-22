@@ -1,7 +1,10 @@
 # IDE / AI
 .claude
 .windsurf
-.agent
+.agents
+
+# AI specs
+specs/
 
 # Environment
 .env

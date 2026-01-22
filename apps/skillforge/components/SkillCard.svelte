@@ -6,10 +6,12 @@
   interface Props {
     skillWithState: SkillWithState;
     onToggle: (skillId: string, enabled: boolean) => void;
+    onUpdate?: (skillName: string) => void;
     toggleLoading?: boolean;
+    updateLoading?: boolean;
   }
 
-  let { skillWithState, onToggle, toggleLoading = false }: Props = $props();
+  let { skillWithState, onToggle, onUpdate, toggleLoading = false, updateLoading = false }: Props = $props();
 
   const { skill, state, config } = $derived(skillWithState);
   const isLocked = $derived(config?.allowUserToggle === false);
@@ -18,6 +20,12 @@
   function handleToggle(newEnabled: boolean) {
     onToggle(skill.id, newEnabled);
   }
+
+  function handleUpdate() {
+    if (onUpdate && state === 'outdated') {
+      onUpdate(skill.name);
+    }
+  }
 </script>
 
 <div class="skill-card" class:orphaned={state === 'orphaned'}>
@@ -25,7 +33,11 @@
     <div class="skill-info">
       <div class="skill-name-row">
         <span class="skill-name">{skill.name}</span>
-        <SkillStateBadge {state} />
+        <SkillStateBadge
+          {state}
+          onUpdateClick={state === 'outdated' ? handleUpdate : undefined}
+          updating={updateLoading}
+        />
         {#if !isEnabled}
           <span class="off-badge">OFF</span>
         {/if}
@@ -34,7 +46,7 @@
     </div>
     <SkillToggle
       enabled={isEnabled}
-      disabled={toggleLoading}
+      loading={toggleLoading}
       locked={isLocked}
       onToggle={handleToggle}
     />

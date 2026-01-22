@@ -1,9 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { StatusResponse, SyncResult, SkillWithState } from '../../lib/types';
-  import { getStatus, triggerSync, toggleSkill } from '../../lib/messaging';
+  import { getStatus, triggerSync, toggleSkill, syncSingleSkill } from '../../lib/messaging';
   import LoginPrompt from '../../components/LoginPrompt.svelte';
-  import StatusIndicator from '../../components/StatusIndicator.svelte';
   import PendingAlert from '../../components/PendingAlert.svelte';
   import SkillCard from '../../components/SkillCard.svelte';
   import SyncButton from '../../components/SyncButton.svelte';
@@ -12,6 +11,7 @@
   let loading = $state(true);
   let syncing = $state(false);
   let toggleLoadingId = $state<string | null>(null);
+  let updatingSkillName = $state<string | null>(null);
   let error = $state<string | null>(null);
   let status = $state<StatusResponse | null>(null);
   let showResults = $state(false);
@@ -28,8 +28,10 @@
     await loadStatus();
   });
 
-  async function loadStatus() {
-    loading = true;
+  async function loadStatus(showLoading = true) {
+    if (showLoading) {
+      loading = true;
+    }
     error = null;
 
     try {
@@ -74,12 +76,32 @@
 
     try {
       await toggleSkill(skillId, enabled);
-      await loadStatus();
+      await loadStatus(false); // Don't show full-page loading when refreshing after toggle
     } catch (e) {
       error = 'Failed to toggle skill';
       console.error('[SkillForge] Toggle failed:', e);
     } finally {
       toggleLoadingId = null;
+    }
+  }
+
+  async function handleUpdate(skillName: string) {
+    updatingSkillName = skillName;
+    error = null;
+
+    try {
+      const result = await syncSingleSkill(skillName);
+
+      if (result.action === 'error') {
+        error = result.message ?? 'Update failed';
+      }
+
+      await loadStatus(false);
+    } catch (e) {
+      error = 'Failed to update skill';
+      console.error('[SkillForge] Update failed:', e);
+    } finally {
+      updatingSkillName = null;
     }
   }
 
@@ -100,12 +122,39 @@
       case 'error': return 'error';
     }
   }
+
+  function formatTimeAgo(timestamp: number | null): string {
+    if (!timestamp) return 'Never';
+
+    const now = Date.now();
+    const diff = now - timestamp;
+
+    if (diff < 60000) return 'Just now';
+    if (diff < 3600000) return `${Math.floor(diff / 60000)} min ago`;
+    if (diff < 86400000) return `${Math.floor(diff / 3600000)} hours ago`;
+    return new Date(timestamp).toLocaleDateString();
+  }
 </script>
 
 <div class="popup">
   <!-- Header -->
   <header class="header">
-    <h1 class="title">SkillForge</h1>
+    <div class="header-left">
+      {#if status?.loggedIn && status.config}
+        <div class="header-title">{status.config.name}</div>
+        <div class="header-meta">
+          <span class="header-version">v{status.config.version}</span>
+          <span class="header-dot connected"></span>
+          <span class="header-status">Connected</span>
+          {#if status.lastSyncTime}
+            <span class="header-separator">·</span>
+            <span class="header-sync">Last synced: {formatTimeAgo(status.lastSyncTime)}</span>
+          {/if}
+        </div>
+      {:else}
+        <h1 class="title">SkillForge</h1>
+      {/if}
+    </div>
     {#if status?.loggedIn}
       <SyncButton
         {syncing}
@@ -130,21 +179,11 @@
   {:else}
     <main class="content">
       <!-- Pending alert -->
-      {#if status.pendingCount > 0}
+      {#if status.pendingCounts.newCount > 0 || status.pendingCounts.updateCount > 0}
         <PendingAlert
-          count={status.pendingCount}
+          counts={status.pendingCounts}
           onSyncClick={handleSync}
           {syncing}
-        />
-      {/if}
-
-      <!-- Status indicator -->
-      {#if status.config}
-        <StatusIndicator
-          configName={status.config.name}
-          configVersion={status.config.version}
-          lastSyncTime={status.lastSyncTime}
-          connected={true}
         />
       {/if}
 
@@ -180,7 +219,9 @@
               <SkillCard
                 {skillWithState}
                 onToggle={handleToggle}
+                onUpdate={handleUpdate}
                 toggleLoading={toggleLoadingId === skillWithState.skill.id}
+                updateLoading={updatingSkillName === skillWithState.skill.name}
               />
             {/each}
           </div>
@@ -196,7 +237,9 @@
               <SkillCard
                 {skillWithState}
                 onToggle={handleToggle}
+                onUpdate={handleUpdate}
                 toggleLoading={toggleLoadingId === skillWithState.skill.id}
+                updateLoading={updatingSkillName === skillWithState.skill.name}
               />
             {/each}
           </div>
@@ -241,6 +284,54 @@
     font-weight: 700;
     color: var(--color-foreground);
     margin: 0;
+  }
+
+  .header-left {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .header-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--color-foreground);
+  }
+
+  .header-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--color-muted);
+  }
+
+  .header-version {
+    color: var(--color-muted);
+  }
+
+  .header-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--color-destructive);
+    flex-shrink: 0;
+  }
+
+  .header-dot.connected {
+    background: var(--color-success-foreground);
+  }
+
+  .header-status {
+    color: var(--color-muted);
+  }
+
+  .header-separator {
+    color: var(--color-border);
+  }
+
+  .header-sync {
+    color: var(--color-muted);
   }
 
   .loading {

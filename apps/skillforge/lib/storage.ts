@@ -1,5 +1,14 @@
 import { storage } from 'wxt/storage';
-import type { ClaudeSkill, ManagedSkill, PendingCounts, SkillsConfig, SyncResult } from './types';
+import type {
+  ClaudeConnector,
+  ClaudeSkill,
+  ConnectorSyncResult,
+  ManagedConnector,
+  ManagedSkill,
+  PendingCounts,
+  SkillsConfig,
+  SyncResult,
+} from './types';
 import { STORAGE_KEYS } from './constants';
 
 /**
@@ -47,7 +56,31 @@ export const managedSkillsItem = storage.defineItem<Record<string, ManagedSkill>
  */
 export const pendingCountsItem = storage.defineItem<PendingCounts>(
   `local:${STORAGE_KEYS.pendingCounts}`,
-  { fallback: { newCount: 0, updateCount: 0, newSkillNames: [], updatedSkillNames: [] } }
+  { fallback: { newCount: 0, updateCount: 0, newSkillNames: [], updatedSkillNames: [], newConnectorCount: 0, newConnectorNames: [] } }
+);
+
+/**
+ * Cached connectors from Claude.ai API
+ */
+export const cachedConnectorsItem = storage.defineItem<ClaudeConnector[]>(
+  `local:${STORAGE_KEYS.cachedConnectors}`,
+  { fallback: [] }
+);
+
+/**
+ * Map of connectors installed by SkillForge
+ */
+export const managedConnectorsItem = storage.defineItem<Record<string, ManagedConnector>>(
+  `local:${STORAGE_KEYS.managedConnectors}`,
+  { fallback: {} }
+);
+
+/**
+ * Last connector sync results
+ */
+export const connectorSyncResultsItem = storage.defineItem<ConnectorSyncResult[]>(
+  `local:${STORAGE_KEYS.connectorSyncResults}`,
+  { fallback: [] }
 );
 
 /**
@@ -108,4 +141,48 @@ export async function removeManagedSkill(name: string): Promise<void> {
   const managed = await managedSkillsItem.getValue();
   delete managed[name];
   await managedSkillsItem.setValue(managed);
+}
+
+/**
+ * Add or update a managed connector
+ */
+export async function setManagedConnector(
+  name: string,
+  url: string,
+  connectorId: string
+): Promise<void> {
+  const managed = await managedConnectorsItem.getValue();
+  const now = Date.now();
+
+  if (managed[name]) {
+    managed[name].url = url;
+    managed[name].connectorId = connectorId;
+    managed[name].updatedAt = now;
+  } else {
+    managed[name] = {
+      name,
+      url,
+      connectorId,
+      installedAt: now,
+      updatedAt: now,
+    };
+  }
+
+  await managedConnectorsItem.setValue(managed);
+}
+
+/**
+ * Get all managed connectors
+ */
+export async function getManagedConnectors(): Promise<Record<string, ManagedConnector>> {
+  return managedConnectorsItem.getValue();
+}
+
+/**
+ * Remove a managed connector from tracking
+ */
+export async function removeManagedConnector(name: string): Promise<void> {
+  const managed = await managedConnectorsItem.getValue();
+  delete managed[name];
+  await managedConnectorsItem.setValue(managed);
 }

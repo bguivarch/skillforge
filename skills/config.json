@@ -1,6 +1,7 @@
 {
   "name": "Skill Forge Demo Pack",
   "version": "1.0.0",
+  "connectors": [],
   "skills": [
     {
       "name": "code-review",

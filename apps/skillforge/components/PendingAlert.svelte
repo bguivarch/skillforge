@@ -11,15 +11,34 @@
 
   const hasNew = $derived(counts.newCount > 0);
   const hasUpdates = $derived(counts.updateCount > 0);
-  const total = $derived(counts.newCount + counts.updateCount);
+  const hasNewConnectors = $derived(counts.newConnectorCount > 0);
+  const total = $derived(counts.newCount + counts.updateCount + counts.newConnectorCount);
 
-  function formatSkillNames(names: string[]): string {
+  function formatNames(names: string[]): string {
     return names.join(', ');
   }
 </script>
 
 {#if total > 0}
   <div class="pending-alerts">
+    {#if hasNewConnectors}
+      <div class="pending-alert connector">
+        <div class="alert-content">
+          <svg class="alert-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+            <path d="M2 17l10 5 10-5"/>
+            <path d="M2 12l10 5 10-5"/>
+          </svg>
+          <div class="alert-text-container">
+            <span class="alert-text">
+              {counts.newConnectorCount} new connector{counts.newConnectorCount > 1 ? 's' : ''} required
+            </span>
+            <span class="alert-connector-names">{formatNames(counts.newConnectorNames)}</span>
+          </div>
+        </div>
+      </div>
+    {/if}
+
     {#if hasNew}
       <div class="pending-alert new">
         <div class="alert-content">
@@ -30,7 +49,7 @@
             <span class="alert-text">
               {counts.newCount} new skill{counts.newCount > 1 ? 's' : ''} available
             </span>
-            <span class="alert-skill-names">{formatSkillNames(counts.newSkillNames)}</span>
+            <span class="alert-skill-names">{formatNames(counts.newSkillNames)}</span>
           </div>
         </div>
       </div>
@@ -46,7 +65,7 @@
             <span class="alert-text">
               {counts.updateCount} skill update{counts.updateCount > 1 ? 's' : ''} available
             </span>
-            <span class="alert-skill-names">{formatSkillNames(counts.updatedSkillNames)}</span>
+            <span class="alert-skill-names">{formatNames(counts.updatedSkillNames)}</span>
           </div>
         </div>
       </div>
@@ -88,6 +107,11 @@
     border: 1px solid rgb(168, 85, 247);
   }
 
+  .pending-alert.connector {
+    background: rgba(234, 179, 8, 0.1);
+    border: 1px solid rgb(234, 179, 8);
+  }
+
   .alert-content {
     display: flex;
     align-items: flex-start;
@@ -113,12 +137,20 @@
     color: rgb(216, 180, 254);
   }
 
+  .pending-alert.connector .alert-connector-names {
+    color: rgb(253, 224, 71);
+  }
+
   .pending-alert.new .alert-icon {
     color: rgb(59, 130, 246);
   }
 
   .pending-alert.update .alert-icon {
     color: rgb(168, 85, 247);
+  }
+
+  .pending-alert.connector .alert-icon {
+    color: rgb(234, 179, 8);
   }
 
   .alert-icon {
@@ -132,6 +164,10 @@
 
   .pending-alert.update .alert-text {
     color: rgb(216, 180, 254);
+  }
+
+  .pending-alert.connector .alert-text {
+    color: rgb(253, 224, 71);
   }
 
   .alert-text {

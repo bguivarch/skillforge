@@ -1,5 +1,5 @@
 import JSZip from 'jszip';
-import type { ClaudeSkill, SkillContent } from '../../lib/types';
+import type { ClaudeConnector, ClaudeSkill, SkillContent } from '../../lib/types';
 import { ENDPOINTS, COOKIE_NAMES } from '../../lib/constants';
 
 /**
@@ -265,4 +265,41 @@ export async function updateSkill(
   }
 
   return JSON.parse(text);
+}
+
+/**
+ * List all MCP connectors for the organization
+ */
+export async function listConnectors(orgId: string): Promise<ClaudeConnector[]> {
+  const url = ENDPOINTS.listConnectors(orgId);
+  const response = await apiRequest<ClaudeConnector[]>(url);
+  return response ?? [];
+}
+
+/**
+ * Create a new MCP connector
+ */
+export async function createConnector(
+  orgId: string,
+  name: string,
+  url: string
+): Promise<ClaudeConnector> {
+  const endpoint = ENDPOINTS.createConnector(orgId);
+  return apiRequest<ClaudeConnector>(endpoint, {
+    method: 'POST',
+    body: JSON.stringify({ name, url }),
+  });
+}
+
+/**
+ * Delete an MCP connector
+ */
+export async function deleteConnector(
+  orgId: string,
+  connectorId: string
+): Promise<void> {
+  const url = ENDPOINTS.deleteConnector(orgId, connectorId);
+  await apiRequest(url, {
+    method: 'DELETE',
+  });
 }

@@ -2,14 +2,27 @@ import { defineBackground } from 'wxt/sandbox';
 import type { AuthResponse, Message, StatusResponse, SyncEngineResult, SyncResult } from '../../lib/types';
 import {
   cachedConfigItem,
+  cachedConnectorsItem,
   cachedSkillsItem,
+  connectorSyncResultsItem,
+  getManagedConnectors,
   getManagedSkills,
   lastSyncTimeItem,
+  removeManagedConnector,
   removeManagedSkill,
   syncResultsItem,
 } from '../../lib/storage';
-import { deleteSkill, getOrganizationId, isUserLoggedIn, listSkills, toggleSkill } from './api-client';
 import {
+  deleteConnector,
+  deleteSkill,
+  getOrganizationId,
+  isUserLoggedIn,
+  listConnectors,
+  listSkills,
+  toggleSkill,
+} from './api-client';
+import {
+  getConnectorStates,
   getSkillStates,
   getPendingCounts,
   runSync,
@@ -65,8 +78,8 @@ async function handleMessage(message: Message): Promise<unknown> {
     case 'GET_STATUS':
       return handleGetStatus();
 
-    case 'SYNC_SKILLS':
-      return handleSyncSkills();
+    case 'SYNC':
+      return handleSync();
 
     case 'SYNC_SINGLE_SKILL':
       return handleSyncSingleSkill(message.skillName);
@@ -76,6 +89,9 @@ async function handleMessage(message: Message): Promise<unknown> {
 
     case 'DELETE_SKILL':
       return handleDeleteSkill(message.skillId, message.skillName);
+
+    case 'DELETE_CONNECTOR':
+      return handleDeleteConnector(message.connectorId, message.connectorName);
 
     case 'GET_PENDING':
       return getPendingCounts();
@@ -108,15 +124,18 @@ async function handleGetStatus(): Promise<StatusResponse> {
       loggedIn: false,
       config: null,
       skills: [],
+      connectors: [],
       lastSyncTime: null,
       syncResults: [],
-      pendingCounts: { newCount: 0, updateCount: 0, newSkillNames: [], updatedSkillNames: [] },
+      connectorSyncResults: [],
+      pendingCounts: { newCount: 0, updateCount: 0, newSkillNames: [], updatedSkillNames: [], newConnectorCount: 0, newConnectorNames: [] },
     };
   }
 
   // Try to refresh data
   const orgId = await getOrganizationId();
   let skills = await cachedSkillsItem.getValue();
+  let connectors = await cachedConnectorsItem.getValue();
   let config = await cachedConfigItem.getValue();
 
   // Fetch fresh data if we have an org ID
@@ -129,6 +148,13 @@ async function handleGetStatus(): Promise<StatusResponse> {
     }
 
     try {
+      connectors = await listConnectors(orgId);
+      await cachedConnectorsItem.setValue(connectors);
+    } catch (error) {
+      console.error('[SkillForge] Failed to fetch connectors:', error);
+    }
+
+    try {
       config = await fetchConfig();
       await cachedConfigItem.setValue(config);
     } catch (error) {
@@ -137,7 +163,9 @@ async function handleGetStatus(): Promise<StatusResponse> {
   }
 
   const managedSkills = await getManagedSkills();
+  const managedConnectors = await getManagedConnectors();
   const skillsWithState = await getSkillStates(skills, config, managedSkills);
+  const connectorsWithState = await getConnectorStates(connectors, config, managedConnectors);
 
   await updatePendingCounts();
   await updateBadge();
@@ -146,16 +174,18 @@ async function handleGetStatus(): Promise<StatusResponse> {
     loggedIn: true,
     config,
     skills: skillsWithState,
+    connectors: connectorsWithState,
     lastSyncTime: await lastSyncTimeItem.getValue(),
     syncResults: await syncResultsItem.getValue(),
+    connectorSyncResults: await connectorSyncResultsItem.getValue(),
     pendingCounts: await getPendingCounts(),
   };
 }
 
 /**
- * Run full skill sync
+ * Run full sync
  */
-async function handleSyncSkills(): Promise<SyncEngineResult> {
+async function handleSync(): Promise<SyncEngineResult> {
   const result = await runSync();
   await updateBadge();
   return result;
@@ -204,4 +234,24 @@ async function handleDeleteSkill(skillId: string, skillName: string): Promise<vo
   // Refresh skills cache
   const skills = await listSkills(orgId);
   await cachedSkillsItem.setValue(skills);
+}
+
+/**
+ * Delete a connector
+ */
+async function handleDeleteConnector(connectorId: string, connectorName: string): Promise<void> {
+  const orgId = await getOrganizationId();
+  if (!orgId) {
+    throw new Error('Not logged in');
+  }
+
+  // Delete from Claude.ai
+  await deleteConnector(orgId, connectorId);
+
+  // Remove from managed connectors tracking
+  await removeManagedConnector(connectorName);
+
+  // Refresh connectors cache
+  const connectors = await listConnectors(orgId);
+  await cachedConnectorsItem.setValue(connectors);
 }

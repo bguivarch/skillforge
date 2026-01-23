@@ -1,5 +1,5 @@
 import JSZip from 'jszip';
-import type { SkillConfig, SkillContent, SkillsConfig } from './types';
+import type { ConnectorConfig, SkillConfig, SkillContent, SkillsConfig } from './types';
 import { parseSkillMd, isSkillMdFormat } from './skill-parser';
 import { CONFIG_URL } from './constants';
 
@@ -70,7 +70,27 @@ function isValidConfig(data: unknown): data is SkillsConfig {
   if (typeof config.version !== 'string') return false;
   if (!Array.isArray(config.skills)) return false;
 
+  // Validate connectors if present
+  if (config.connectors !== undefined) {
+    if (!Array.isArray(config.connectors)) return false;
+    if (!config.connectors.every(isValidConnectorConfig)) return false;
+  }
+
   return config.skills.every(isValidSkillConfig);
+}
+
+/**
+ * Validate individual connector config
+ */
+function isValidConnectorConfig(connector: unknown): connector is ConnectorConfig {
+  if (!connector || typeof connector !== 'object') return false;
+
+  const c = connector as Record<string, unknown>;
+
+  if (typeof c.name !== 'string' || c.name.trim() === '') return false;
+  if (typeof c.url !== 'string' || c.url.trim() === '') return false;
+
+  return true;
 }
 
 /**

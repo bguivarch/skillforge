@@ -1,4 +1,60 @@
 /**
+ * Connector config from R2
+ */
+export interface ConnectorConfig {
+  name: string;
+  url: string;
+  description?: string;
+}
+
+/**
+ * Connector from Claude.ai API
+ */
+export interface ClaudeConnector {
+  id: string;
+  uuid: string;
+  name: string;
+  url: string;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Tracked connector installed by SkillForge
+ */
+export interface ManagedConnector {
+  name: string;
+  url: string;
+  connectorId: string;
+  installedAt: number;
+  updatedAt: number;
+}
+
+/**
+ * Connector lifecycle state
+ */
+export type ConnectorState = 'managed' | 'orphaned' | 'other';
+
+/**
+ * Connector with computed state for UI
+ */
+export interface ConnectorWithState {
+  connector: ClaudeConnector;
+  state: ConnectorState;
+  config?: ConnectorConfig;
+  managedConnector?: ManagedConnector;
+}
+
+/**
+ * Sync result for a single connector
+ */
+export interface ConnectorSyncResult {
+  connectorName: string;
+  action: 'created' | 'skipped' | 'error';
+  message?: string;
+}
+
+/**
  * Skill definition from remote config
  */
 export interface SkillConfig {
@@ -6,6 +62,7 @@ export interface SkillConfig {
   version: string;
   description: string;
   source: string;
+  connectors?: string[];
   enabledByDefault?: boolean;
   allowUserToggle?: boolean;
 }
@@ -16,6 +73,7 @@ export interface SkillConfig {
 export interface SkillsConfig {
   name: string;
   version: string;
+  connectors?: ConnectorConfig[];
   skills: SkillConfig[];
 }
 
@@ -90,6 +148,7 @@ export interface SyncResult {
 export interface SyncEngineResult {
   success: boolean;
   results: SyncResult[];
+  connectorResults: ConnectorSyncResult[];
   error?: string;
 }
 
@@ -101,6 +160,8 @@ export interface PendingCounts {
   updateCount: number;
   newSkillNames: string[];
   updatedSkillNames: string[];
+  newConnectorCount: number;
+  newConnectorNames: string[];
 }
 
 /**
@@ -110,8 +171,10 @@ export interface StatusResponse {
   loggedIn: boolean;
   config: SkillsConfig | null;
   skills: SkillWithState[];
+  connectors: ConnectorWithState[];
   lastSyncTime: number | null;
   syncResults: SyncResult[];
+  connectorSyncResults: ConnectorSyncResult[];
   pendingCounts: PendingCounts;
 }
 
@@ -129,8 +192,9 @@ export interface AuthResponse {
 export type Message =
   | { type: 'CHECK_AUTH' }
   | { type: 'GET_STATUS' }
-  | { type: 'SYNC_SKILLS' }
+  | { type: 'SYNC' }
   | { type: 'SYNC_SINGLE_SKILL'; skillName: string }
   | { type: 'TOGGLE_SKILL'; skillId: string; enabled: boolean }
   | { type: 'DELETE_SKILL'; skillId: string; skillName: string }
+  | { type: 'DELETE_CONNECTOR'; connectorId: string; connectorName: string }
   | { type: 'GET_PENDING' };

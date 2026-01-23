@@ -1,10 +1,11 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { StatusResponse, SyncResult, SkillWithState } from '../../lib/types';
-  import { getStatus, triggerSync, toggleSkill, syncSingleSkill, deleteSkill } from '../../lib/messaging';
+  import type { StatusResponse, SkillWithState, ConnectorWithState } from '../../lib/types';
+  import { getStatus, triggerSync, toggleSkill, syncSingleSkill, deleteSkill, deleteConnector } from '../../lib/messaging';
   import LoginPrompt from '../../components/LoginPrompt.svelte';
   import PendingAlert from '../../components/PendingAlert.svelte';
   import SkillCard from '../../components/SkillCard.svelte';
+  import ConnectorCard from '../../components/ConnectorCard.svelte';
   import SyncButton from '../../components/SyncButton.svelte';
 
   // State
@@ -13,17 +14,35 @@
   let toggleLoadingId = $state<string | null>(null);
   let updatingSkillName = $state<string | null>(null);
   let deletingSkillId = $state<string | null>(null);
+  let deletingConnectorId = $state<string | null>(null);
   let error = $state<string | null>(null);
   let status = $state<StatusResponse | null>(null);
-  let showResults = $state(false);
+
+  // Navigation state
+  let scope = $state<'company' | 'personal'>('company');
+  let activeView = $state<'skills' | 'mcp'>('skills');
 
   // Derived state
   const companySkills = $derived(
     status?.skills.filter(s => s.state !== 'other') ?? []
   );
-  const otherSkills = $derived(
+  const personalSkills = $derived(
     status?.skills.filter(s => s.state === 'other') ?? []
   );
+  const companyConnectors = $derived(
+    status?.connectors.filter(c => c.state !== 'other') ?? []
+  );
+  const personalConnectors = $derived(
+    status?.connectors.filter(c => c.state === 'other') ?? []
+  );
+
+  // Current view data
+  const currentSkills = $derived(scope === 'company' ? companySkills : personalSkills);
+  const currentConnectors = $derived(scope === 'company' ? companyConnectors : personalConnectors);
+
+  // Counts for footer badges
+  const skillsCount = $derived(currentSkills.length);
+  const mcpCount = $derived(currentConnectors.length);
 
   onMount(async () => {
     await loadStatus();
@@ -48,19 +67,12 @@
   async function handleSync() {
     syncing = true;
     error = null;
-    showResults = false;
 
     try {
       const result = await triggerSync();
 
       if (!result.success) {
         error = result.error ?? 'Sync failed';
-      } else {
-        showResults = true;
-        // Hide results after 5 seconds
-        setTimeout(() => {
-          showResults = false;
-        }, 5000);
       }
 
       await loadStatus(false);
@@ -77,7 +89,7 @@
 
     try {
       await toggleSkill(skillId, enabled);
-      await loadStatus(false); // Don't show full-page loading when refreshing after toggle
+      await loadStatus(false);
     } catch (e) {
       error = 'Failed to toggle skill';
       console.error('[SkillForge] Toggle failed:', e);
@@ -121,21 +133,18 @@
     }
   }
 
-  function getResultIcon(action: SyncResult['action']): string {
-    switch (action) {
-      case 'created': return '✓';
-      case 'updated': return '✓';
-      case 'skipped': return '−';
-      case 'error': return '✗';
-    }
-  }
+  async function handleDeleteConnector(connectorId: string, connectorName: string) {
+    deletingConnectorId = connectorId;
+    error = null;
 
-  function getResultClass(action: SyncResult['action']): string {
-    switch (action) {
-      case 'created': return 'success';
-      case 'updated': return 'info';
-      case 'skipped': return 'muted';
-      case 'error': return 'error';
+    try {
+      await deleteConnector(connectorId, connectorName);
+      await loadStatus(false);
+    } catch (e) {
+      error = 'Failed to delete connector';
+      console.error('[SkillForge] Delete connector failed:', e);
+    } finally {
+      deletingConnectorId = null;
     }
   }
 
@@ -164,7 +173,7 @@
           <span class="header-status">Connected</span>
           {#if status.lastSyncTime}
             <span class="header-separator">·</span>
-            <span class="header-sync">Last synced: {formatTimeAgo(status.lastSyncTime)}</span>
+            <span class="header-sync">{formatTimeAgo(status.lastSyncTime)}</span>
           {/if}
         </div>
       {:else}
@@ -194,8 +203,21 @@
   <!-- Main content -->
   {:else}
     <main class="content">
+      <!-- Scope selector -->
+      <div class="scope-bar">
+        <div class="scope-selector">
+          <select bind:value={scope} class="scope-dropdown">
+            <option value="company">Company</option>
+            <option value="personal">Personal</option>
+          </select>
+          <svg class="dropdown-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </div>
+      </div>
+
       <!-- Pending alert -->
-      {#if status.pendingCounts.newCount > 0 || status.pendingCounts.updateCount > 0}
+      {#if scope === 'company' && (status.pendingCounts.newCount > 0 || status.pendingCounts.updateCount > 0 || status.pendingCounts.newConnectorCount > 0)}
         <PendingAlert
           counts={status.pendingCounts}
           onSyncClick={handleSync}
@@ -210,109 +232,116 @@
         </div>
       {/if}
 
-      <!-- Sync results -->
-      {#if showResults && status.syncResults.length > 0}
-        <section class="section">
-          <h2 class="section-title">Sync Results</h2>
-          <div class="results-list">
-            {#each status.syncResults as result}
-              <div class="result-item {getResultClass(result.action)}">
-                <span class="result-icon">{getResultIcon(result.action)}</span>
-                <span class="result-name">{result.skillName}</span>
-                <span class="result-action">{result.action}</span>
+      <!-- Skills View -->
+      {#if activeView === 'skills'}
+        <div class="view-content">
+          {#if currentSkills.length > 0}
+            <div class="items-list">
+              {#each currentSkills as skillWithState (skillWithState.skill.id)}
+                <SkillCard
+                  {skillWithState}
+                  onToggle={handleToggle}
+                  onUpdate={handleUpdate}
+                  onDelete={handleDelete}
+                  toggleLoading={toggleLoadingId === skillWithState.skill.id}
+                  updateLoading={updatingSkillName === skillWithState.skill.name}
+                  deleteLoading={deletingSkillId === skillWithState.skill.id}
+                />
+              {/each}
+            </div>
+          {:else}
+            <div class="empty-state">
+              <div class="empty-icon">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+                </svg>
               </div>
-            {/each}
-          </div>
-        </section>
-      {/if}
-
-      <!-- Company Skills -->
-      {#if companySkills.length > 0}
-        <section class="section">
-          <h2 class="section-title">Company Skills</h2>
-          <div class="skills-list">
-            {#each companySkills as skillWithState (skillWithState.skill.id)}
-              <SkillCard
-                {skillWithState}
-                onToggle={handleToggle}
-                onUpdate={handleUpdate}
-                onDelete={handleDelete}
-                toggleLoading={toggleLoadingId === skillWithState.skill.id}
-                updateLoading={updatingSkillName === skillWithState.skill.name}
-                deleteLoading={deletingSkillId === skillWithState.skill.id}
-              />
-            {/each}
-          </div>
-        </section>
-      {/if}
-
-      <!-- Other Skills -->
-      {#if otherSkills.length > 0}
-        <section class="section">
-          <h2 class="section-title">Other Skills</h2>
-          <div class="skills-list">
-            {#each otherSkills as skillWithState (skillWithState.skill.id)}
-              <SkillCard
-                {skillWithState}
-                onToggle={handleToggle}
-                onUpdate={handleUpdate}
-                onDelete={handleDelete}
-                toggleLoading={toggleLoadingId === skillWithState.skill.id}
-                updateLoading={updatingSkillName === skillWithState.skill.name}
-                deleteLoading={deletingSkillId === skillWithState.skill.id}
-              />
-            {/each}
-          </div>
-        </section>
-      {/if}
-
-      <!-- Empty state -->
-      {#if companySkills.length === 0 && otherSkills.length === 0}
-        <div class="empty-state">
-          <p>No skills found. Click sync to get started.</p>
+              <p>{scope === 'company' ? 'No company skills. Click sync to get started.' : 'No personal skills.'}</p>
+            </div>
+          {/if}
         </div>
       {/if}
 
-      <!-- Sync button -->
-      <div class="sync-container">
-        <SyncButton
-          {syncing}
-          onClick={handleSync}
-        />
-      </div>
-    </main>
-  {/if}
+      <!-- MCP View -->
+      {#if activeView === 'mcp'}
+        <div class="view-content">
+          {#if currentConnectors.length > 0}
+            <div class="items-list">
+              {#each currentConnectors as connectorWithState (connectorWithState.connector.uuid)}
+                <ConnectorCard
+                  {connectorWithState}
+                  onDelete={scope === 'company' ? handleDeleteConnector : undefined}
+                  deleteLoading={deletingConnectorId === (connectorWithState.connector.uuid || connectorWithState.connector.id)}
+                />
+              {/each}
+            </div>
+          {:else}
+            <div class="empty-state">
+              <div class="empty-icon">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                  <path d="M2 17l10 5 10-5"/>
+                  <path d="M2 12l10 5 10-5"/>
+                </svg>
+              </div>
+              <p>{scope === 'company' ? 'No company MCP connectors.' : 'No personal MCP connectors.'}</p>
+            </div>
+          {/if}
+        </div>
+      {/if}
 
-  <!-- Footer -->
-  <footer class="footer">
-    <a href="https://github.com/bguivarch/skillforge/issues" target="_blank" rel="noopener noreferrer" class="footer-link">
-      <svg class="footer-icon" viewBox="0 0 24 24" fill="currentColor">
-        <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
-      </svg>
-      Report issue
-    </a>
-    <a href="https://x.com/BGuivarch" target="_blank" rel="noopener noreferrer" class="footer-link">
-      <svg class="footer-icon" viewBox="0 0 24 24" fill="currentColor">
-        <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
-      </svg>
-      @BGuivarch
-    </a>
-  </footer>
+    </main>
+
+    <!-- Footer Navigation -->
+    <nav class="footer-nav">
+      <button
+        class="nav-tab"
+        class:active={activeView === 'skills'}
+        onclick={() => activeView = 'skills'}
+      >
+        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+        </svg>
+        <span class="nav-label">Skills</span>
+        {#if skillsCount > 0}
+          <span class="nav-badge">{skillsCount}</span>
+        {/if}
+      </button>
+      <button
+        class="nav-tab"
+        class:active={activeView === 'mcp'}
+        onclick={() => activeView = 'mcp'}
+      >
+        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+          <path d="M2 17l10 5 10-5"/>
+          <path d="M2 12l10 5 10-5"/>
+        </svg>
+        <span class="nav-label">MCP</span>
+        {#if mcpCount > 0}
+          <span class="nav-badge">{mcpCount}</span>
+        {/if}
+      </button>
+    </nav>
+  {/if}
 </div>
 
 <style>
   .popup {
     display: flex;
     flex-direction: column;
-    min-height: 400px;
+    height: 100%;
+    overflow: hidden;
   }
 
   .header {
+    flex-shrink: 0;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 16px;
+    padding: 14px 16px;
     border-bottom: 1px solid var(--color-border);
+    background: var(--color-background);
   }
 
   .title {
@@ -343,7 +372,11 @@
   }
 
   .header-version {
-    color: var(--color-muted);
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 10px;
+    padding: 1px 5px;
+    background: var(--color-secondary);
+    border-radius: 3px;
   }
 
   .header-dot {
@@ -356,6 +389,7 @@
 
   .header-dot.connected {
     background: var(--color-success-foreground);
+    box-shadow: 0 0 6px var(--color-success-foreground);
   }
 
   .header-status {
@@ -371,6 +405,7 @@
   }
 
   .loading {
+    flex: 1;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -396,11 +431,55 @@
   }
 
   .content {
-    flex: 1;
-    padding: 16px;
+    flex: 1 1 auto;
+    padding: 12px 16px 16px;
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 12px;
+    overflow-y: auto;
+    min-height: 0;
+  }
+
+  /* Scope selector */
+  .scope-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .scope-selector {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .scope-dropdown {
+    appearance: none;
+    background: var(--color-secondary);
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    padding: 6px 28px 6px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-foreground);
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .scope-dropdown:hover {
+    border-color: var(--color-muted);
+  }
+
+  .scope-dropdown:focus {
+    outline: none;
+    border-color: var(--color-primary);
+  }
+
+  .dropdown-chevron {
+    position: absolute;
+    right: 8px;
+    pointer-events: none;
+    color: var(--color-muted);
   }
 
   .error-banner {
@@ -412,115 +491,117 @@
     font-size: 13px;
   }
 
-  .section {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .section-title {
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--color-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-  }
-
-  .skills-list {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .results-list {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    background: var(--color-secondary);
-    border-radius: 8px;
-    padding: 8px;
-  }
-
-  .result-item {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 4px 8px;
-    border-radius: 4px;
-    font-size: 12px;
-  }
-
-  .result-icon {
-    font-weight: 600;
-    width: 16px;
-    text-align: center;
-  }
-
-  .result-name {
+  .view-content {
     flex: 1;
-    font-weight: 500;
+    display: flex;
+    flex-direction: column;
   }
 
-  .result-action {
-    text-transform: capitalize;
-    font-size: 11px;
-  }
-
-  .result-item.success {
-    color: var(--color-success-foreground);
-  }
-
-  .result-item.info {
-    color: rgb(147, 197, 253);
-  }
-
-  .result-item.muted {
-    color: var(--color-muted);
-  }
-
-  .result-item.error {
-    color: var(--color-destructive-foreground);
+  .items-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
   }
 
   .empty-state {
-    text-align: center;
-    padding: 32px 16px;
-    color: var(--color-muted);
-    font-size: 13px;
-  }
-
-  .sync-container {
-    margin-top: auto;
-    padding-top: 8px;
-  }
-
-  .footer {
+    flex: 1;
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 16px;
-    padding: 12px 16px;
+    padding: 32px 16px;
+    color: var(--color-muted);
+    text-align: center;
+    gap: 12px;
+  }
+
+  .empty-icon {
+    opacity: 0.4;
+  }
+
+  .empty-state p {
+    font-size: 13px;
+    margin: 0;
+  }
+
+  /* Footer Navigation */
+  .footer-nav {
+    display: flex;
+    flex-shrink: 0;
     border-top: 1px solid var(--color-border);
+    background: var(--color-background);
     margin-top: auto;
   }
 
-  .footer-link {
+  .nav-tab {
+    flex: 1;
     display: flex;
+    flex-direction: column;
     align-items: center;
-    gap: 6px;
+    justify-content: center;
+    gap: 4px;
+    padding: 10px 8px;
+    border: none;
+    background: transparent;
     color: var(--color-muted);
-    text-decoration: none;
-    font-size: 12px;
-    transition: color 0.15s ease;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    position: relative;
   }
 
-  .footer-link:hover {
+  .nav-tab::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0;
+    height: 2px;
+    background: var(--color-primary);
+    transition: width 0.2s ease;
+  }
+
+  .nav-tab:hover {
     color: var(--color-foreground);
+    background: var(--color-secondary);
   }
 
-  .footer-icon {
-    width: 14px;
-    height: 14px;
+  .nav-tab.active {
+    color: var(--color-primary);
+  }
+
+  .nav-tab.active::before {
+    width: 32px;
+  }
+
+  .nav-icon {
     flex-shrink: 0;
+  }
+
+  .nav-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+  }
+
+  .nav-badge {
+    position: absolute;
+    top: 6px;
+    right: calc(50% - 24px);
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 16px;
+    text-align: center;
+    background: var(--color-accent);
+    color: var(--color-foreground);
+    border-radius: 8px;
+  }
+
+  .nav-tab.active .nav-badge {
+    background: var(--color-primary);
+    color: var(--color-primary-foreground);
   }
 </style>

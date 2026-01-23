@@ -15,10 +15,10 @@ export async function getStatus(): Promise<StatusResponse> {
 }
 
 /**
- * Trigger full skill sync
+ * Trigger full sync
  */
 export async function triggerSync(): Promise<SyncEngineResult> {
-  return browser.runtime.sendMessage({ type: 'SYNC_SKILLS' });
+  return browser.runtime.sendMessage({ type: 'SYNC' });
 }
 
 /**
@@ -40,6 +40,13 @@ export async function toggleSkill(skillId: string, enabled: boolean): Promise<vo
  */
 export async function deleteSkill(skillId: string, skillName: string): Promise<void> {
   return browser.runtime.sendMessage({ type: 'DELETE_SKILL', skillId, skillName });
+}
+
+/**
+ * Delete a connector
+ */
+export async function deleteConnector(connectorId: string, connectorName: string): Promise<void> {
+  return browser.runtime.sendMessage({ type: 'DELETE_CONNECTOR', connectorId, connectorName });
 }
 
 /**

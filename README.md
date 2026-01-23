@@ -266,6 +266,82 @@ Content...
 
 The YAML frontmatter contains metadata, and everything after becomes the skill instructions.
 
+## MCP Connectors
+
+SkillForge also supports syncing **MCP (Model Context Protocol) connectors** to your team's Claude.ai accounts. This lets you share integrations like GitHub, Linear, Gmail, and other services alongside your skills.
+
+### How It Works
+
+```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│   config.json   │     │   Cloudflare    │     │   Chrome        │
+│   ├── skills    │────▶│   R2 Bucket     │────▶│   Extension     │
+│   └── connectors│     │                 │     │                 │
+└─────────────────┘     └─────────────────┘     └─────────────────┘
+                                                        │
+                                                Syncs to Claude.ai
+                                                (Skills + Connectors)
+```
+
+1. Define connectors in `config.json` alongside your skills
+2. Upload to R2 with `pnpm upload-skills`
+3. Team members sync via the extension
+4. Connectors appear in their Claude.ai accounts ready to use
+
+### Adding Connectors to config.json
+
+Add a `connectors` array to your `config.json`:
+
+```json
+{
+  "name": "Team Name Skills Pack",
+  "version": "1.0.0",
+  "connectors": [
+    {
+      "name": "github-mcp",
+      "url": "https://mcp.example.com/github",
+      "description": "GitHub integration for code access"
+    },
+    {
+      "name": "linear-mcp",
+      "url": "https://mcp.example.com/linear",
+      "description": "Linear integration for issue tracking"
+    }
+  ],
+  "skills": [
+    ...
+  ]
+}
+```
+
+### Connector Config Fields
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `name` | Yes | Unique identifier for the connector |
+| `url` | Yes | URL of the MCP server |
+| `description` | No | Brief description shown in UI |
+
+### Using Connectors
+
+Once synced, connectors appear in Claude.ai's integrations and can be used in conversations. Popular MCP providers include:
+
+- **[Composio](https://composio.dev/)** - GitHub, Linear, Gmail, Slack, and more
+- **Custom servers** - Build your own MCP servers for internal tools
+
+### Managing Connectors in the Extension
+
+The extension popup has two tabs:
+- **Skills** - Manage team and personal skills
+- **MCP** - View and manage MCP connectors
+
+Connector states:
+| State | Description |
+|-------|-------------|
+| Managed | Installed by SkillForge, tracked |
+| Orphaned | Was managed, removed from config |
+| Other | User's personal connector (not managed) |
+
 ### Creating Custom Skills
 
 Use the skill-creator to scaffold a new skill with the proper structure:

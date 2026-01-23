@@ -1,5 +1,11 @@
 import type {
+  ClaudeConnector,
   ClaudeSkill,
+  ConnectorConfig,
+  ConnectorState,
+  ConnectorSyncResult,
+  ConnectorWithState,
+  ManagedConnector,
   ManagedSkill,
   PendingCounts,
   SkillConfig,
@@ -17,16 +23,22 @@ import {
 } from '../../lib/config-loader';
 import {
   cachedConfigItem,
+  cachedConnectorsItem,
   cachedSkillsItem,
+  connectorSyncResultsItem,
+  getManagedConnectors,
   getManagedSkills,
   lastSyncTimeItem,
   managedSkillsItem,
   pendingCountsItem,
+  setManagedConnector,
   setManagedSkill,
   syncResultsItem,
 } from '../../lib/storage';
 import {
+  createConnector,
   getOrganizationId,
+  listConnectors,
   listSkills,
   createSkill,
   updateSkill,
@@ -36,10 +48,86 @@ import {
 import { trackEvent } from '../../lib/tracking';
 
 /**
+ * Sync connectors from config to Claude.ai
+ */
+async function syncConnectors(
+  orgId: string,
+  connectorConfigs: ConnectorConfig[]
+): Promise<ConnectorSyncResult[]> {
+  const results: ConnectorSyncResult[] = [];
+
+  if (!connectorConfigs || connectorConfigs.length === 0) {
+    return results;
+  }
+
+  // Get existing connectors from Claude.ai
+  const existingConnectors = await listConnectors(orgId);
+  const existingByUrl = new Map(existingConnectors.map(c => [c.url, c]));
+  const existingByName = new Map(existingConnectors.map(c => [c.name.toLowerCase(), c]));
+
+  // Get managed connectors from storage
+  const managedConnectors = await getManagedConnectors();
+
+  for (const connectorConfig of connectorConfigs) {
+    try {
+      // Check if URL already exists
+      const existingByUrlMatch = existingByUrl.get(connectorConfig.url);
+      if (existingByUrlMatch) {
+        // URL exists - track as managed and skip (use uuid as the ID)
+        const connectorId = existingByUrlMatch.uuid || existingByUrlMatch.id;
+        await setManagedConnector(
+          connectorConfig.name,
+          connectorConfig.url,
+          connectorId
+        );
+        results.push({
+          connectorName: connectorConfig.name,
+          action: 'skipped',
+          message: 'Already installed',
+        });
+        continue;
+      }
+
+      // Check if name exists with different URL
+      const existingByNameMatch = existingByName.get(connectorConfig.name.toLowerCase());
+      if (existingByNameMatch && existingByNameMatch.url !== connectorConfig.url) {
+        results.push({
+          connectorName: connectorConfig.name,
+          action: 'skipped',
+          message: 'Name conflict: connector exists with different URL',
+        });
+        continue;
+      }
+
+      // Create new connector
+      const created = await createConnector(orgId, connectorConfig.name, connectorConfig.url);
+
+      // Track as managed (use uuid as the ID)
+      const createdId = created.uuid || created.id;
+      await setManagedConnector(connectorConfig.name, connectorConfig.url, createdId);
+
+      results.push({
+        connectorName: connectorConfig.name,
+        action: 'created',
+      });
+    } catch (error) {
+      results.push({
+        connectorName: connectorConfig.name,
+        action: 'error',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  }
+
+  return results;
+}
+
+/**
  * Run full skill sync from R2 config to Claude.ai
  */
 export async function runSync(): Promise<SyncEngineResult> {
   const results: SyncResult[] = [];
+  const connectorResults: ConnectorSyncResult[] = [];
 
   try {
     // 1. Get organization ID
@@ -48,6 +136,7 @@ export async function runSync(): Promise<SyncEngineResult> {
       return {
         success: false,
         results: [],
+        connectorResults: [],
         error: 'Not logged in to Claude.ai. Please log in and try again.',
       };
     }
@@ -61,25 +150,52 @@ export async function runSync(): Promise<SyncEngineResult> {
         return {
           success: false,
           results: [],
+          connectorResults: [],
           error: error.message,
         };
       }
       throw error;
     }
 
-    // 3. Get existing skills from Claude.ai
+    // 3. Sync connectors FIRST (dependencies before dependents)
+    if (config.connectors && config.connectors.length > 0) {
+      const syncedConnectorResults = await syncConnectors(orgId, config.connectors);
+      connectorResults.push(...syncedConnectorResults);
+    }
+
+    // 4. Get existing skills from Claude.ai
     const existingSkills = await listSkills(orgId);
     const existingByName = new Map(existingSkills.map(s => [s.name.toLowerCase(), s]));
 
-    // 4. Get managed skills from storage
+    // 5. Get managed skills from storage
     const managedSkills = await getManagedSkills();
 
-    // 5. Process each skill from config
+    // 6. Get available connectors for dependency checking
+    const availableConnectors = await listConnectors(orgId);
+    const availableConnectorNames = new Set(availableConnectors.map(c => c.name.toLowerCase()));
+
+    // 7. Process each skill from config
     for (const skillConfig of config.skills) {
       const skillNameLower = skillConfig.name.toLowerCase();
       const existing = existingByName.get(skillNameLower);
 
       try {
+        // Check connector dependencies
+        if (skillConfig.connectors && skillConfig.connectors.length > 0) {
+          const missingConnectors = skillConfig.connectors.filter(
+            c => !availableConnectorNames.has(c.toLowerCase())
+          );
+
+          if (missingConnectors.length > 0) {
+            results.push({
+              skillName: skillConfig.name,
+              action: 'error',
+              message: `Missing connectors: ${missingConnectors.join(', ')}`,
+            });
+            continue;
+          }
+        }
+
         // Resolve skill content (fetch from source if needed)
         const content = await resolveSkillContent(skillConfig);
         const newHash = await hashContent(content.instructions);
@@ -161,29 +277,34 @@ export async function runSync(): Promise<SyncEngineResult> {
       }
     }
 
-    // 6. Refresh skills list after sync
+    // 8. Refresh skills and connectors list after sync
     const updatedSkills = await listSkills(orgId);
+    const updatedConnectors = await listConnectors(orgId);
 
-    // 7. Update storage
+    // 9. Update storage
     await Promise.all([
       lastSyncTimeItem.setValue(Date.now()),
       syncResultsItem.setValue(results),
+      connectorSyncResultsItem.setValue(connectorResults),
       cachedSkillsItem.setValue(updatedSkills),
+      cachedConnectorsItem.setValue(updatedConnectors),
       cachedConfigItem.setValue(config),
     ]);
 
-    // 8. Update pending counts
+    // 10. Update pending counts
     await updatePendingCounts();
 
     return {
       success: true,
       results,
+      connectorResults,
     };
   } catch (error) {
     if (error instanceof ClaudeApiError && error.isAuthError) {
       return {
         success: false,
         results,
+        connectorResults,
         error: 'Authentication failed. Please log in to Claude.ai.',
       };
     }
@@ -191,6 +312,7 @@ export async function runSync(): Promise<SyncEngineResult> {
     return {
       success: false,
       results,
+      connectorResults,
       error: error instanceof Error ? error.message : 'Sync failed',
     };
   }
@@ -241,10 +363,7 @@ export async function syncSingleSkill(skillName: string): Promise<SyncResult> {
       s => s.name.toLowerCase() === skillName.toLowerCase()
     );
 
-    // 5. Get managed skills from storage
-    const managedSkills = await getManagedSkills();
-
-    // 6. Resolve skill content
+    // 5. Resolve skill content
     const content = await resolveSkillContent(skillConfig);
     const newHash = await hashContent(content.instructions);
 
@@ -377,7 +496,14 @@ export async function getSkillStates(
  * Calculate and update pending counts (new skills vs updates)
  */
 export async function updatePendingCounts(): Promise<PendingCounts> {
-  const zeroCounts: PendingCounts = { newCount: 0, updateCount: 0, newSkillNames: [], updatedSkillNames: [] };
+  const zeroCounts: PendingCounts = {
+    newCount: 0,
+    updateCount: 0,
+    newSkillNames: [],
+    updatedSkillNames: [],
+    newConnectorCount: 0,
+    newConnectorNames: [],
+  };
 
   try {
     const orgId = await getOrganizationId();
@@ -395,6 +521,19 @@ export async function updatePendingCounts(): Promise<PendingCounts> {
     const existingSkills = await cachedSkillsItem.getValue();
     const existingNames = new Set(existingSkills.map(s => s.name.toLowerCase()));
     const managedSkills = await getManagedSkills();
+
+    // Check for pending connectors
+    const existingConnectors = await cachedConnectorsItem.getValue();
+    const existingConnectorUrls = new Set(existingConnectors.map(c => c.url));
+    const newConnectorNames: string[] = [];
+
+    if (config.connectors) {
+      for (const connectorConfig of config.connectors) {
+        if (!existingConnectorUrls.has(connectorConfig.url)) {
+          newConnectorNames.push(connectorConfig.name);
+        }
+      }
+    }
 
     const newSkillNames: string[] = [];
     const updatedSkillNames: string[] = [];
@@ -417,6 +556,8 @@ export async function updatePendingCounts(): Promise<PendingCounts> {
       updateCount: updatedSkillNames.length,
       newSkillNames,
       updatedSkillNames,
+      newConnectorCount: newConnectorNames.length,
+      newConnectorNames,
     };
     await pendingCountsItem.setValue(counts);
     return counts;
@@ -434,11 +575,68 @@ export async function getPendingCounts(): Promise<PendingCounts> {
 }
 
 /**
+ * Get connector states for all connectors
+ */
+export async function getConnectorStates(
+  claudeConnectors: ClaudeConnector[],
+  config: SkillsConfig | null,
+  managedConnectors: Record<string, ManagedConnector>
+): Promise<ConnectorWithState[]> {
+  const result: ConnectorWithState[] = [];
+  const configByName = new Map(
+    config?.connectors?.map(c => [c.name.toLowerCase(), c]) ?? []
+  );
+  const configByUrl = new Map(
+    config?.connectors?.map(c => [c.url, c]) ?? []
+  );
+
+  for (const connector of claudeConnectors) {
+    const connectorNameLower = connector.name.toLowerCase();
+    // Use uuid as the primary ID (Claude.ai API uses uuid)
+    const connectorId = connector.uuid || connector.id;
+
+    // Check if managed by matching connector ID or URL (must have valid values to match)
+    const managed = Object.values(managedConnectors).find(
+      m => (connectorId && m.connectorId === connectorId) ||
+           (connector.url && m.url === connector.url)
+    );
+
+    // Check if in config by name or URL
+    const connectorConfig = configByName.get(connectorNameLower) ??
+      configByUrl.get(connector.url);
+
+    let state: ConnectorState;
+
+    if (managed) {
+      if (connectorConfig) {
+        // In managed list and in config
+        state = 'managed';
+      } else {
+        // In managed list but not in config - orphaned
+        state = 'orphaned';
+      }
+    } else {
+      // Not managed - user's own connector
+      state = 'other';
+    }
+
+    result.push({
+      connector,
+      state,
+      config: connectorConfig,
+      managedConnector: managed,
+    });
+  }
+
+  return result;
+}
+
+/**
  * Update extension badge with total pending count
  */
 export async function updateBadge(): Promise<void> {
   const counts = await getPendingCounts();
-  const total = counts.newCount + counts.updateCount;
+  const total = counts.newCount + counts.updateCount + counts.newConnectorCount;
 
   if (total > 0) {
     await browser.action.setBadgeText({ text: String(total) });

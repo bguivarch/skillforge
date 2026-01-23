@@ -24,6 +24,12 @@ export const ENDPOINTS = {
     `${CLAUDE_API_BASE}/organizations/${orgId}/skills/disable-skill`,
   deleteSkill: (orgId: string) =>
     `${CLAUDE_API_BASE}/organizations/${orgId}/skills/delete-skill`,
+  listConnectors: (orgId: string) =>
+    `${CLAUDE_API_BASE}/organizations/${orgId}/mcp/remote_servers`,
+  createConnector: (orgId: string) =>
+    `${CLAUDE_API_BASE}/organizations/${orgId}/mcp/remote_servers`,
+  deleteConnector: (orgId: string, connectorId: string) =>
+    `${CLAUDE_API_BASE}/organizations/${orgId}/mcp/remote_servers/${connectorId}`,
 } as const;
 
 /**
@@ -43,4 +49,7 @@ export const STORAGE_KEYS = {
   cachedConfig: 'cachedConfig',
   managedSkills: 'managedSkills',
   pendingCounts: 'pendingCounts',
+  cachedConnectors: 'cachedConnectors',
+  managedConnectors: 'managedConnectors',
+  connectorSyncResults: 'connectorSyncResults',
 } as const;

@@ -33,6 +33,7 @@ import {
   disableSkill,
   ClaudeApiError,
 } from './api-client';
+import { trackEvent } from '../../lib/tracking';
 
 /**
  * Run full skill sync from R2 config to Claude.ai
@@ -141,6 +142,9 @@ export async function runSync(): Promise<SyncEngineResult> {
               console.warn('[SkillForge] Failed to disable skill:', e);
             }
           }
+
+          // Track skill creation
+          trackEvent('skill_imported');
 
           results.push({
             skillName: skillConfig.name,
@@ -276,6 +280,9 @@ export async function syncSingleSkill(skillName: string): Promise<SyncResult> {
           console.warn('[SkillForge] Failed to disable skill:', e);
         }
       }
+
+      // Track skill creation
+      trackEvent('skill_imported');
 
       result = {
         skillName: skillConfig.name,

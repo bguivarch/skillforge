@@ -18,9 +18,13 @@ import {
   updatePendingCounts,
 } from './sync-engine';
 import { fetchConfig } from '../../lib/config-loader';
+import { trackInstall } from '../../lib/tracking';
 
 export default defineBackground(() => {
   console.log('[SkillForge] Background service worker started');
+
+  // Track install on first run
+  trackInstall();
 
   // Listen for messages from popup
   browser.runtime.onMessage.addListener((message: unknown) => {

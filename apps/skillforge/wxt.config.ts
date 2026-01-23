@@ -19,6 +19,7 @@ export default defineConfig({
       'https://claude.ai/*',
       'https://*.claude.ai/*',
       'https://*.r2.dev/*',
+      'https://bguivarch.val.run/*',
     ],
 
     icons: {

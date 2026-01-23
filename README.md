@@ -33,12 +33,57 @@ SkillForge solves this by:
    pnpm upload-skills                           Syncs to Claude.ai
 ```
 
-
-
 1. Define skills as Markdown files with YAML frontmatter
 2. Upload to R2 with `pnpm upload-skills`
 3. Team installs the Chrome extension
 4. Extension syncs skills to their Claude.ai accounts
+
+### What's Shared vs Personal
+
+| Level | What | Description |
+|-------|------|-------------|
+| **Team** (R2 Bucket) | `config.json` | The list of skills and their metadata |
+| **Team** (R2 Bucket) | `SKILL.md` files | The actual skill instructions |
+| **Personal** (Extension) | Toggle states | Which skills you've enabled/disabled |
+| **Personal** (Claude.ai) | Skill instances | Copies of skills in your account |
+
+**Key insight**: Skills in your Claude.ai account are **copies**, not live links. That's why "Sync" exists — to update your local copies when the team updates the source.
+
+### Multiple Teams
+
+Each team maintains their own R2 bucket and builds their own extension. Users install the extension for their team, which connects them to their team's skill library.
+
+```
+                           TEAM A                                    TEAM B
+                    ┌─────────────────┐                       ┌─────────────────┐
+                    │  R2 Bucket A    │                       │  R2 Bucket B    │
+                    │  (team-a.r2.dev)│                       │  (team-b.r2.dev)│
+                    │                 │                       │                 │
+                    │  config.json    │                       │  config.json    │
+                    │  skill-1/       │                       │  skill-x/       │
+                    │  skill-2/       │                       │  skill-y/       │
+                    └────────┬────────┘                       └────────┬────────┘
+                             │                                         │
+              ┌──────────────┼──────────────┐           ┌──────────────┼──────────────┐
+              │              │              │           │              │              │
+              ▼              ▼              ▼           ▼              ▼              ▼
+        ┌──────────┐   ┌──────────┐   ┌──────────┐ ┌──────────┐  ┌──────────┐  ┌──────────┐
+        │  Alice   │   │   Bob    │   │  Carol   │ │  David   │  │   Eve    │  │  Frank   │
+        │Extension │   │Extension │   │Extension │ │Extension │  │Extension │  │Extension │
+        │(Team A)  │   │(Team A)  │   │(Team A)  │ │(Team B)  │  │(Team B)  │  │(Team B)  │
+        └────┬─────┘   └────┬─────┘   └────┬─────┘ └────┬─────┘  └────┬─────┘  └────┬─────┘
+             │              │              │            │             │             │
+             ▼              ▼              ▼            ▼             ▼             ▼
+        ┌──────────┐   ┌──────────┐   ┌──────────┐ ┌──────────┐  ┌──────────┐  ┌──────────┐
+        │ Claude   │   │ Claude   │   │ Claude   │ │ Claude   │  │ Claude   │  │ Claude   │
+        │ Account  │   │ Account  │   │ Account  │ │ Account  │  │ Account  │  │ Account  │
+        │ (Alice)  │   │  (Bob)   │   │ (Carol)  │ │ (David)  │  │  (Eve)   │  │ (Frank)  │
+        └──────────┘   └──────────┘   └──────────┘ └──────────┘  └──────────┘  └──────────┘
+```
+
+- **One R2 bucket per team** — contains the shared skill library
+- **One extension build per team** — hardcoded with that team's `VITE_CONFIG_URL`
+- **One Claude.ai account per user** — where skills get installed as personal copies
 
 ## Quick Start
 

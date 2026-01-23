@@ -1,6 +1,10 @@
 # SkillForge
 
-A Chrome extension and CLI toolkit for managing team-shared Claude.ai skills. Centralize your organization's AI instructions, sync them across team members, and keep everyone on the same version.
+Create and share Claude skills with your team. Even non-tech folks become power users.
+
+![SkillForge Extension](docs/screenshot.png)
+
+The extension popup shows all your team skills with toggles to enable/disable them. A checkmark indicates the skill is managed and in sync with your team's configuration.
 
 ## Why SkillForge?
 
@@ -28,6 +32,8 @@ SkillForge solves this by:
         │                                               │
    pnpm upload-skills                           Syncs to Claude.ai
 ```
+
+
 
 1. Define skills as Markdown files with YAML frontmatter
 2. Upload to R2 with `pnpm upload-skills`
@@ -338,7 +344,7 @@ Shows count of pending actions (new skills + available updates).
 1. Go to the [Cloudflare Dashboard](https://dash.cloudflare.com/) (create an account if needed)
 2. Navigate to R2 Object Storage
 3. Create a new bucket
-4. Enable public access (or use a custom domain)
+4. **Enable public access** - This is required for the Chrome extension to fetch skills. Go to your bucket settings and enable "R2.dev subdomain" or configure a custom domain. The bucket must be publicly accessible since the extension fetches skills directly from the URL.
 5. Create an API token with R2 read/write permissions
 6. Copy credentials to your `.env` file
 
@@ -409,12 +415,47 @@ When your team updates the skills, you'll see a badge on the extension icon. Cli
 
 > **Note**: You don't need to set up R2 or clone any repository. The extension is pre-configured to connect to your team's skill server.
 
+## Multi-Admin Setup
+
+Skills are stored locally in the `skills/` folder of this repository. For **most users** (colleagues receiving skills via the extension), no Git knowledge or repository access is needed — they just install the extension and sync.
+
+However, if **multiple people need to manage skills** (add, edit, or remove skills from the shared config), they'll need to:
+
+1. Fork this repository (one fork per team)
+2. Clone the fork
+3. Make changes to the `skills/` folder
+4. Commit and push to keep everyone in sync
+5. Run `pnpm upload-skills` to publish changes to R2
+
+This ensures all skill administrators stay synchronized and changes are tracked with version control.
+
+> **Note**: We're aware this workflow adds friction for teams with multiple skill administrators. If SkillForge gets traction and people find it useful, we plan to add a proper backend with a web UI for collaborative skill management — no Git required.
+
 ## Contributing
 
 1. Fork the repository
 2. Create a feature branch
 3. Make your changes
 4. Submit a pull request
+
+## Privacy & Analytics
+
+SkillForge collects **anonymous usage data** to help improve the product:
+
+- Install count
+- Feature usage (skills imported)
+- Extension version
+
+**We don't collect:**
+
+- Personal information
+- Browsing history
+- Skill content
+- IP addresses
+
+All data is aggregated and anonymous.
+
+[View our analytics code](apps/skillforge/lib/tracking.ts) — it's open source like everything else.
 
 ## License
 
